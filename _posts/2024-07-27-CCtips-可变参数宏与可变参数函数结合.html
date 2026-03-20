@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[C/C++][tips] 可变参数宏与可变参数函数结合 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[C/C++][tips] 可变参数宏与可变参数函数结合</h1>
+    <p class="date">2024-07-27</p>
+    <div class="labels"><span class="label">C/C++</span> </div>
+    <hr>
+    <div class="content">
+<h1>C++</h1>
+<p>在C++中，实现一个可变参数函数（variadic function），非常方便，基于模板函数就可以实现：</p>
+<p>``<code>C++</p>
+<p>template(typename arg, typename... args)</p>
+<p>return_type function_name(arg var1, args... var2)</p>
+</code>`<code>
+<p>可以基于模板变参函数实现多类型日志打印：</p>
+</code>`<code>C++
+<p>#include <iostream></p>
+<p>// base function</p>
+<p>void print() {}</p>
+<p>template <typename T, typename... Types></p>
+<p>void print(T args1, Types... args2)</p>
+<p>{</p>
+<p>    std::cout << args1 << std::endl;</p>
+<p>    print(args2...);</p>
+<p>}</p>
+<p>int main(int argc, char** argv) {</p>
+<p>    print(1, 2, 3, "one", "two", "three");</p>
+<p>    return 0;</p>
+<p>}</p>
+</code>`<code>
+<p>可以看出，这实际上是一个模板+递归的实现，因此需要一个base function来结束递归（不可缺少）。</p>
+<h1>C语言</h1>
+<p>在C++中，通过模板变参函数，我们可以很方便实现变参函数函数不同类型输入的目的，但是，在C语言中却不那么方便。虽然C语言的<stdarg.h>头文件中提供了一个可变参数函数的方法，但是该方法和C++比起来，需要新增一个参数，无论是printf的fmt还是参数个数，这个参数是不可缺少的， <a href="https://en.cppreference.com/w/c/variadic">variadic function in C</a></p>
+<p>。我们可以看一个例子：</p>
+</code>`<code>C
+<p>#include <stdio.h></p>
+<p>#include <stdarg.h></p>
+<p>void simple_printf(const char* fmt, ...) {</p>
+<p>    va_list args;</p>
+<p>    va_start(args, fmt);</p>
+<p>    while (*fmt != '\0') {</p>
+<p>        if (*fmt == 'd') {</p>
+<p>            int i = va_arg(args, int);</p>
+<p>            printf("%d\n", i);</p>
+<p>        } else if (*fmt == 'c') {</p>
+<p>            // A 'char' variable will be promoted to 'int'</p>
+<p>            // A character literal in C is already 'int' by itself</p>
+<p>            int c = va_arg(args, int);</p>
+<p>            printf("%c\n", c);</p>
+<p>        } else if (*fmt == 'f') {</p>
+<p>            double d = va_arg(args, double);</p>
+<p>            printf("%f\n", d);</p>
+<p>        }</p>
+<p>        ++fmt;</p>
+<p>    }</p>
+<p>    va_end(args);</p>
+<p>}</p>
+<p>int main(void) {</p>
+<p>    simple_printf("dcff", 3, 'a', 1.999, 42.5); </p>
+<p>}</p>
+</code>`<code>
+<p>这是一个简单的printf的实现，里面虽然支持不同类型的输入，但是和printf一样，需要根据d、f等类型进行推断，不能直接使用，我们看另一个例子：</p>
+</code>`<code>C
+<p>#include <stdarg.h></p>
+<p>#include <stdio.h></p>
+<p>int caculate_sum(int num, ...) {</p>
+<p>    int sum = 0;</p>
+<p>    va_list args;</p>
+<p>    va_start(args, num);</p>
+<p>    for (int i = 0; i < num; ++i) {</p>
+<p>        sum += va_arg(args, int);</p>
+<p>    }</p>
+<p>    va_end(args);</p>
+<p>    return sum;</p>
+<p>}</p>
+<p>int main(int argc, char** argv) {</p>
+<p>    int sum = caculate_sum(5, 1, 2, 3, 4, 5);</p>
+<p>    printf("sum:%u\n", sum);</p>
+<p>    return 0;</p>
+<p>}</p>
+</code>`<code>
+<p>C语言的可变参数函数和C++的可变参数模板函数相比，有两个区别：</p>
+<p>* C语言需要使用第一个参数来格式化或者记录参数个数</p>
+<p>* C语言可变参数函数的参数只能是同一类型（第一个参数格式化外除外，或者增加额外参数表征参数类型）</p>
+<p>对于第一个区别，我们可以使用可变参数宏来解决：</p>
+<h1>可变参数宏</h1>
+<p>使用可变参数宏搭配C语言变参函数可以解决第一个问题，下面我们来看具体例子：</p>
+ </code>`<code>C
+<p>void _logMsg(int num, ...);</p>
+<p>#define __PARSE_ARG_N(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, \</p>
+<p>                      _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40,  \</p>
+<p>                      _41, _42, _43, _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59,  \</p>
+<p>                      _60, _61, _62, _63, N, ...)                                                                     \</p>
+<p>    N</p>
+<p>#define __PARSE_RESP_N()                                                                                             \</p>
+<p>    62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35,  \</p>
+<p>        34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, \</p>
+<p>        6, 5, 4, 3, 2, 1, 0</p>
+<p>#define __PARSE_NARG__(...) __PARSE_ARG_N(__VA_ARGS__)</p>
+<p>#define __PARSE_NARG(...) __PARSE_NARG__(_, ##__VA_ARGS__, __PARSE_RESP_N())</p>
+<p>/*</p>
+<p> * Usage: LOG_MSG(arg1, arg2, arg3)</p>
+<p> <em> @argN: char</em></p>
+<p>*/</p>
+<p>#define LOG_MSG(...) _logMsg(__PARSE_NARG(__VA_ARGS__), __VA_ARGS__)</p>
+</code>`<code>
+<p>以上展示的是头文件中的内容，我们先声明了一个可变参数函数</code>void _logMsg(int num, ...);<code>，然后是可变参数宏的定义，我们先看看一共定义了几个宏：</p>
+<p>* __PARSE_ARG_N</p>
+<p>* __PARSE_RESP_N</p>
+<p>* __PARSE_NARG__</p>
+<p>* __PARSE_NARG</p>
+<p>* LOG_MSG</p>
+<p>从定义上看，</code>_logMsg<code>是一个变参函数，被</code>LOG_MSG<code>调用，我们通过举例说明可变参数宏如何获取参数个数，并传递给可变参数函数:</p>
+</code>LOG_MSG(1, 2, 3)<code>
+<p>--> </code>_logMsg(__PARSE_NARG(1, 2, 3), 1, 2, 3)<code></p>
+<p>    --></code> _logMsg(__PARSE_NARG__(_, 1, 2, 3, __PARSE_RESP_N()), 1, 2, 3)<code></p>
+<p>        --> </code>_logMsg(__PARSE_ARG_N(_, 1, 2, 3, 62, 61 ...3, 2, 1, 0), 1, 2, 3))<code></p>
+<p>            --> </code>_logMsg(3, 1, 2, 3)<code></p>
+<p>但是，有个问题，如果参数多于63就会出错，比如参数是4个，最终num只能拿到2，会导致参数丢失。</p>
+<p>但是，</code>LOG_MSG`无法传入不同类型数据。因此C语言可变参数函数与C++的第二个区别，目前没有可行的方法。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #60</p>
+    </footer>
+</body>
+</html>

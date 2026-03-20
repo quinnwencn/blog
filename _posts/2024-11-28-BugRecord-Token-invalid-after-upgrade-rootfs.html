@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[BugRecord] Token invalid after upgrade rootfs - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[BugRecord] Token invalid after upgrade rootfs</h1>
+    <p class="date">2024-11-28</p>
+    <div class="labels"><span class="label">TrustZone</span> <span class="label">TEE</span> <span class="label">Layerscape</span> <span class="label">Rootfs</span> <span class="label">BSP</span> </div>
+    <hr>
+    <div class="content">
+<h1>Problem Summary</h1>
+<p>I enabled virtual-based HSM in Layerscape(ls1043ardb) with TEE. The system worked well initially, but after upgrading, I found that I could no longer use the previously generated keys in the HSM to verify certificates on my machine.</p>
+<h2>Related commands:</h2>
+<li><strong>Initialize a token in HSM</strong>:</li>
+<p>``<code>bash</p>
+<p>p11tool --initialize "pkcs11:model=PKCS11-OP-TEE;manufacturer=NXP;serial=1;token=greengrass;id=%00%00%00%00;object=tcu_key;type=private" --provider /usr/lib/libpkcs11.so --label greengrass</p>
+</code>`<code>
+<li><strong>Generate key pairs using openssl</strong> (Note: it's recommended to generate key pairs in HSM, but this is for demonstration):</li>
+</code>`<code>bash
+<p>openssl genrsa -out rsa_key_2048.pem 2048</p>
+</code>`<code>
+<li><strong>Import private key into HSM using </code>sobj_app<code>, provided by NXP</strong>:</li>
+</code>`<code>bash
+<p>sobj_app -C -f rsa_key_2048.pem -k rsa -o pair -s 2048 -l "tcu_key" -i 0</p>
+</code>`<code>
+<p>After the key is imported, I use a custom tool to generate a root CA using the imported key in HSM， issue a certificate, and pass it to another device. The solution worked well for me before the upgrade. However, after upgrading the system, I can no longer use the key in HSM to verify the certificate I issued.</p>
+<h1>Solution Investigation</h1>
+<p>The first issue I suspected was that TEE might be encrypting the meta files on REE, located at </code>/data/tee<code>. My assumption was that these files might have been corrupted during the upgrade. However, after checking,  I found that the files and db in </code>/data/tee<code> remained unchanged after the upgrade:</p>
+<p>* Hashes of files in </code>/data/tee<code> before upgrade:</p>
+<img src="https://github.com/user-attachments/assets/39bc8c66-37c1-4287-ac05-2768aadf7004" alt="image" style="max-width:100%;">
+<p>* Hashes of files in </code>/data/tee<code> after upgrade:</p>
+<img src="https://github.com/user-attachments/assets/1599a2a2-4030-41ba-a7fb-6dc6484a7014" alt="image" style="max-width:100%;">
+<p>So, file corruption was not the cause of the problem. However, the fact that the files were not corrupted doesn't necessarily mean that the TEE applicationITA) can still open and read them properly.</p>
+<p>Since files in REE are encrypted. it's possible that TEE lost the key to decrypt these encrypted files, causing the HSM to lose the keys. Upon further inspection, I found that the <strong>FEK</strong> is Encrypted using <strong>TSK</strong>(Trust Application Storage Key), and the <strong>TSK</strong> is generated using the <em>HMAC-SHA256</em> algorithm with parameters derived from <strong>SSK</strong>(Secure Storage Key) and <strong>TA_UUID</strong>. <strong>SSK</strong> is also generated using <em>HMAC-SHA256</em>, but with parameters from <strong>HUK</strong>(Hardware Unique Key) and Chip ID, both of which are unique per chip. The <strong>HUK</strong> is read from either <strong>CAAM</strong>(Cryptographic Accelerator and Assurance Module) or the <strong>OTP</strong>(One-Time Programmable) device. Because the SSK, TSK, and FEK are chip-specific and are supposed to remain the same after an upgrade, I concluded that these cannot be the cause of the HSM failure.  Further details about SSK, TSK, and FEK can be found in my original blog: <a href="https://github.com/quinnwencn/blog/issues/4">TEE的机密性和完整性保障</a>.</p>
+<p>Next, I compared the token in the HSM before and after the upgrade, which finally revealed the root cause:</p>
+<p>* Token before upgrade:</p>
+<img src="https://github.com/user-attachments/assets/7dc7f06d-64f6-4522-8e5f-51ca027f55cd" alt="image" style="max-width:100%;">
+<p>* Token after upgrade:</p>
+<img src="https://github.com/user-attachments/assets/a2f8df6e-b65d-4d5e-8a0c-b4559fed676d" alt="image" style="max-width:100%;">
+<p>The token label changed from </code>greengrass<code> to </code>TEE_BASED_TOKEN<code> after the upgrade. The latter label(</code>TEE_BASED_TOKEN<code> is the default label used by NXP for an uninitialized token:</p>
+</code>`<code>C
+<p>CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)</p>
+<p>{</p>
+<p>	CK_RV rc = CKR_OK;</p>
+<p>	struct slot_info *slot_info = NULL;</p>
+<p>	p11_global_lock();</p>
+<p>	if (!is_lib_initialized()) {</p>
+<p>		rc = CKR_CRYPTOKI_NOT_INITIALIZED;</p>
+<p>		goto end;</p>
+<p>	}</p>
+<p>	if (pInfo == NULL) {</p>
+<p>		rc = CKR_ARGUMENTS_BAD;</p>
+<p>		goto end;</p>
+<p>	}</p>
+<p>	switch (slotID) {</p>
+<p>		case TEE_SLOT_ID:</p>
+<p>			if (token_already_initialized(slotID)) {</p>
+<p>				slot_info = get_global_slot_info(TEE_SLOT_ID);</p>
+<p>				memcpy(pInfo, &slot_info->token_data.token_info,</p>
+<p>					sizeof(CK_TOKEN_INFO));</p>
+<p>			} else</p>
+<p>				Get_TEE_TokenInfo(pInfo);</p>
+<p>			break;</p>
+<p>		default:</p>
+<p>			rc = CKR_SLOT_ID_INVALID;</p>
+<p>	}</p>
+<p>end:</p>
+<p>	p11_global_unlock();</p>
+<p>	return rc;</p>
+<p>}</p>
+</code>`<code>
+<p>In </code>C_GetTokenInfo<code>, if the token is uninitialized, it calls </code>Get_TEE_TokenInfo<code>, which assigns the default "uninitialized" state to the token. This is problematic because if a token is uninitialized, it should either return an empty token or a message indicating that the token is uninitialized, similar to how SoftHSM handles it.</p>
+</code>`<code>C
+<p>CK_RV Get_TEE_TokenInfo(CK_TOKEN_INFO_PTR pInfo)</p>
+<p>{</p>
+<p>	memset(pInfo->label, ' ', sizeof(pInfo->label));</p>
+<p>	strncpy((char *)pInfo->label, "TEE_BASED_TOKEN",</p>
+<p>		strlen("TEE_BASED_TOKEN"));</p>
+<p>	memset(pInfo->manufacturerID, ' ', sizeof(pInfo->manufacturerID));</p>
+<p>	strncpy((char *)pInfo->manufacturerID, "NXP", strlen("NXP"));</p>
+<p>	memset(pInfo->model, ' ', sizeof(pInfo->model));</p>
+<p>	strncpy((char *)pInfo->model, "PKCS11-OP-TEE",</p>
+<p>		strlen("PKCS11-OP-TEE"));</p>
+<p>	memset(pInfo->serialNumber, ' ', sizeof(pInfo->serialNumber));</p>
+<p>	strncpy((char *)pInfo->serialNumber, "1", strlen("1"));</p>
+<p>	pInfo->flags = 0;</p>
+<p>	pInfo->ulMaxSessionCount = 10;</p>
+<p>	pInfo->ulSessionCount = 0;</p>
+<p>	pInfo->ulMaxRwSessionCount = 5;</p>
+<p>	pInfo->ulRwSessionCount = 0;</p>
+<p>	pInfo->ulMaxPinLen = 8;</p>
+<p>	pInfo->ulMinPinLen = 4;</p>
+<p>	pInfo->ulTotalPublicMemory = CK_UNAVAILABLE_INFORMATION;</p>
+<p>	pInfo->ulFreePublicMemory = CK_UNAVAILABLE_INFORMATION;</p>
+<p>	pInfo->ulTotalPrivateMemory = CK_UNAVAILABLE_INFORMATION;</p>
+<p>	pInfo->ulFreePrivateMemory = CK_UNAVAILABLE_INFORMATION;</p>
+<p>	pInfo->hardwareVersion.major = 0;</p>
+<p>	pInfo->hardwareVersion.minor = 0;</p>
+<p>	pInfo->firmwareVersion.major = 0;</p>
+<p>	pInfo->firmwareVersion.minor = 0;</p>
+<p>	memset(pInfo->utcTime, '0', sizeof(pInfo->utcTime));</p>
+<p>	return CKR_OK;</p>
+<p>}</p>
+</code>`<code>
+<p>From the code above, it's clear that the token status changes from "initialized" to "uninitialized" after an upgrade. However, the question remains: Where is the token status stored, and why does it change after the upgrade?</p>
+<p>To investigate, I looked into the function token_already_initialized. Token information is queried using get_global_slot_info, which retrieves the token by slot ID from a global variable g_slot_info. In the same file (general.c), get_global_slot_info is called in initialize_slot, which then reads slot information from data using token_load_data. This eventually calls token_load_data_file, which reads the token file from /lib/optee_armtz/%s%lu.</p>
+<p>The root cause is that the token data is stored in /lib/optee_armtz/%s%lu, which resides in the root filesystem. When the system is upgraded, the root filesystem is overwritten, causing the token information to be deleted.</p>
+</code>`<code>C
+<p>static uint32_t token_load_data_file(CK_SLOT_ID slotID,</p>
+<p>			struct token_data *token_data)</p>
+<p>{</p>
+<p>	FILE *fptr = NULL;</p>
+<p>	uint32_t rc = 0;</p>
+<p>	char file_name[50];</p>
+<p>	struct token_data td;</p>
+<p>	sprintf(file_name, "/lib/optee_armtz/%s%lu",  "TEE_TOKEN_", slotID);</p>
+<p>	fptr = fopen(file_name, "r");</p>
+<p>	if (!fptr) {</p>
+<p>		print_info("fopen failed\n");</p>
+<p>		rc = errno;</p>
+<p>		goto end;</p>
+<p>	}</p>
+<p>	/<em> Read token data </em>/</p>
+<p>	if (!fread(&td, sizeof(struct token_data), 1, fptr)) {</p>
+<p>		print_info("fread failed\n");</p>
+<p>		rc = errno;</p>
+<p>		goto end;</p>
+<p>	}</p>
+<p>	memcpy(token_data, &td, sizeof(struct token_data));</p>
+<p>	fclose(fptr);</p>
+<p>end:</p>
+<p>	return rc;</p>
+<p>}</p>
+</code>`<code>
+<h1>Conclusion</h1>
+<p>NXP stores token info in </code>/lib/optee_armtz/%s%u`, which resides in the root filesystem. When the root filesystem is upgraded, the token info is deleted. </p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #79</p>
+    </footer>
+</body>
+</html>

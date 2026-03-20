@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto] PKCS11中slot和token的理解 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto] PKCS11中slot和token的理解</h1>
+    <p class="date">2024-06-22</p>
+    <div class="labels"><span class="label">PKCS11</span> <span class="label">HSM</span> </div>
+    <hr>
+    <div class="content">
+<h1>理解</h1>
+<a href="https://docs.oasis-open.org/pkcs11/pkcs11-base/v2.40/os/pkcs11-base-v2.40-os.html">PKCS11</a> 定义了独立于HSM、HSE等安全模块平台等接口，对于遵循PKCS11标准的安全硬件，都可以使用PKCS11的接口管理和使用这些安全硬件。PKCS11中提出了Slot和Token的概念，这两个概念在使用中非常难以理解，如果不理解透彻，甚至在使用中会经常犯错。我也经常困惑于这两个概念，对于一些开源代码，也很好奇为什么他们都默认使用Slot 0，而不是用其他slot，为什么指定了Slot后，还需要初始化token。今天，我就按自己的理解，尝试将slot和token的关系说明白。
+<p>我们可以理解为PKCS11类似于规定了一排标准的HSM插槽，每个插槽也就是Slot都可以插入一个HSM/HSE等安全硬件模块（只要这些安全硬件模块等插口严格按照PKCS11的标准制造）。这样，我们在使用时，只要在插入安全硬件到某个slot后，就可以通过这个slot使用安全硬件模块。</p>
+<img src="https://github.com/quinnwencn/blog/assets/143626366/b8ea2f85-7bb2-490d-9ef2-e8dd260708fe "slots and pkcs11"" alt="image" style="max-width:100%;">
+<p>图中的外框可以理解为PKCS11，PKCS11规定了每一个插槽的大小（操作API），只要HSM/HSE等制造商按照这个标准制造安全硬件模块，那么就可以插上PKCS11的框进行使用。而插入slot的安全硬件被PKCS11成为token，也就是令牌，不管是HSM还是HSE，都统一称为token。</p>
+<h1>使用</h1>
+<p>在pkcs11的示例代码如：<a href="https://github.com/parallaxsecond/rust-cryptoki/blob/main/cryptoki/tests/common.rs">cryptoki</a>中，默认使用slot 0生成和存储密钥：</p>
+<p>``<code>Rust</p>
+<p>pub fn init_pins() -> (Pkcs11, Slot) {</p>
+<p>    let pkcs11 = get_pkcs11();</p>
+<p>    // initialize the library</p>
+<p>    pkcs11.initialize(CInitializeArgs::OsThreads).unwrap();</p>
+<p>    // find a slot, get the first one</p>
+<p>    let slot = pkcs11.get_slots_with_token().unwrap().remove(0);</p>
+<p>    let so_pin = AuthPin::new(SO_PIN.into());</p>
+<p>    pkcs11.init_token(slot, &so_pin, "Test Token").unwrap();</p>
+<p>    {</p>
+<p>        // open a session</p>
+<p>        let session = pkcs11.open_rw_session(slot).unwrap();</p>
+<p>        // log in the session</p>
+<p>        session.login(UserType::So, Some(&so_pin)).unwrap();</p>
+<p>        session.init_pin(&AuthPin::new(USER_PIN.into())).unwrap();</p>
+<p>    }</p>
+<p>    (pkcs11, slot)</p>
+<p>}</p>
+</code>``
+<p>这是因为slot的使用有一个比较常见的原则（或者叫惯例？），如果系统中只有一个HSM/或者说token，那么通常使用slot 0插入这个token；如果存在多个token，那么可以根据需求自由选择使用的slot，并添加token标签进行管理。</p>
+<h1>疑问</h1>
+<p>但是，用于管理HSM的PIN码应该如何保存呢？ HSM中存在两种管理者：安全管理者（Security Officer）和用户管理者（User Officer），他们分别都有一个PIN码。由于PIN码控制着对HSM的访问，因此需要妥善管理存放这两个PIN码。但是，对于单一HSM的环境，比如汽车的控制器上，如何保存PIN码我至今仍没有想到比较合理的方法。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #46</p>
+    </footer>
+</body>
+</html>

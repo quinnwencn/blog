@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto] RSA加密原理 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto] RSA加密原理</h1>
+    <p class="date">2025-01-15</p>
+    <div class="labels"><span class="label">Crypto</span> </div>
+    <hr>
+    <div class="content">
+<h1>基础</h1>
+<h2>欧拉函数</h2>
+<h3>定义</h3>
+<p>欧拉函数（Euler's Totient Function）, 记作ϕ(n)， 表示小于或者等于n的正整数中，与n互为质数的数的个数。因此欧拉函数的定义为：</p>
+<p>$$\phi(n) = \text{小于或等于 } n \text{ 的正整数中，与 } n \text{ 互质的数的个数}$$</p>
+<h3>欧拉函数的性质</h3>
+<li>质数</li>
+<p>如果一个数 $p$ 是质数，那么 $\phi(p) = p - 1$ ，因为1到 $p-1$ 的数都与 $p$ 互质。</p>
+<li>质数的幂</li>
+<p>如果 $p$ 是质数， $k$ 是正整数，那么：</p>
+<p> $$\phi(p^k) = p^k - p^{k-1}$$ </p>
+<li>乘法性</li>
+<p>如果 $m$ 和 $n$ 互质（即 $gcd(m, n) = 1$ ），那么：</p>
+<p> $$\phi(m \times n) = \phi(m) \times \phi(n)$$</p>
+<li>欧拉定理</li>
+<p>如果 $m$ 和 $n$ 互质，那么：</p>
+<p>$$m^{\phi(n)} \equiv 1 mod n$$</p>
+<li>模逆元</li>
+<p>如果 $e$ 和 $\phi(n)$ 互质，那么存在一个整数 $d$ 使得：</p>
+<p>$$e \times d \equiv 1 mod \phi(n)$$</p>
+<h1>RSA</h1>
+<h2>原理</h2>
+<li>选择两个大质数 $p$ 和 $q$ ，计算他们的乘机 $n = p \times q$ ；</li>
+<li>计算欧拉函数 $\phi(n) = (p - 1) \times (q - 1)$ ;</li>
+<li>选择一个公钥指数 $e$ ，满足 $1 < e < \phi(n)$ ，并且 $e$ 与 $\phi(n)$ 互质；</li>
+<li>计算私钥指数 $d$ ，使得 $d \times e \equiv 1 mod \phi(n)$ ；</li>
+<li>此时，公钥是 $(e, n)$ ， 私钥是 $(d, n)$ 。</li>
+<h2>步骤</h2>
+<h3>密钥生成</h3>
+<p>秘钥生成其实就是上述原理的部分。</p>
+<h3>加密</h3>
+<p>加密公式：$c = m^e mod n$ ,其中 $m$ 是明文， $c$ 是密文</p>
+<h3>解密</h3>
+<p>解密公式： $m = e^d mod n$</p>
+<h2>安全原理</h2>
+<p>RSA的安全性基于数学界的<em>大整数分解的困难性</em>， 对于一个大的合数 $n$ ，将 $n$ 分解成两个大质数因数 $p$ 和 $q$ 是非常困难的，这需要很大的算力，现有计算能力下无法求解，但是在未来算力发展后，可能被算出，（因此要使用至少RSA2048的强度，当然现在有说法2048已经不安全了）。</p>
+<li><em>大整数分解的困难性</em>：</li>
+<p>    * 如果攻击者能分解 $n = p \times q$ ，就可以计算出 $\phi(n) = (p - 1) \times (q - 1)$ ，然后就可以通过 $e$ 计算出私钥 $d$。</p>
+<p>    * 但由于大整数分解困难，因此无法破解</p>
+<li>私钥 $d$ 的保密性</li>
+<p>    * 私钥 $d$ 是通过 $d$ 和 $\phi(n)$ 计算出的，由于 $\phi(n)$ 无法破解，因此无法计算私钥</p>
+<p>    *  $e$ 是较小的质数（如65537），用于提高计算效率，虽然它是公开的，但是只要 $n$ 无法被分解，就无法破解RSA</p>
+<h2>RSA的攻击方式</h2>
+<li>小指数攻击</li>
+<p>虽然 $e$ 选取小的质数可以加速RSA的加解密计算过程，但是太小的 $e$ 会导致明文 $m$ 也很小，由加密过程可以直接开方（三次方，四次方）计算明文</p>
+<li>共模攻击</li>
+<p>如果多个加密用户使用的 $n$ 想通，但是使用不同的 $e$， 攻击者可以通过共模攻击回复明文</p>
+<li>提高算力攻击</li>
+<p>随着量子计算机的发展，通过提高算力破解RSA已经成为现实：<a href="https://www.bankinfosecurity.com/blogs/researcher-claims-to-crack-rsa-2048-quantum-computer-p-3536">Crack RSA 2048</a></p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #98</p>
+    </footer>
+</body>
+</html>

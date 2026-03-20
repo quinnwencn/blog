@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of hashtable - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of hashtable</h1>
+    <p class="date">2025-02-08</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> <span class="label">SGI</span> </div>
+    <hr>
+    <div class="content">
+<p>基于红黑树的set和map容器，可以实现查找、插入和删除都是Log(N)的复杂度，对于普通场景已经足够用了。但是，如果考虑需要常数操作时间的容器，红黑树结构是无法满足需求的。能实现常数查找的容器，目前接触到的是数组（vector或者是array），但是数组的删除却是O(N)的复杂度。hash table在插入、删除和查找操作上都能实现常数级别的复杂度操作，它的实现以统计为基础。STL中的unordered_set和unordered_map都是以hashtable为底层实现的容器，实现了查找、插入和删除常数级别操作的功能。</p>
+<p>hashtable是一种对键存储和操作的容器（unordered_set可以看做键和值一样），因此可以认为是一种字典结构的数据结构，hashtable最重要的函数就是一个将键映射到实际存储为止的函数，叫hash function（散列函数），散列函数将存储对象的键映射到数组的索引上（hashtable底层存储实际上是数组），从而实现了常数级别的存储。在删除时，只会将对应索引的数组元素设置为invalid，不会像数组一样删除，因此也是常数级别的删除操作。问题在于，因为数组是有大小的，比如是TotalSize，不同存储对象的键经过散列函数处理后，可能得到同一个数组索引，也就是哈希碰撞。</p>
+<h1>哈希碰撞</h1>
+<p>当不同存储对象的键经过散列函数处理后的到同一个数组索引，就发生了哈希碰撞。处理哈希碰撞的方法常见的有以下几种：</p>
+<p>* 线性探测</p>
+<p>* 二次探测</p>
+<p>* 开链法</p>
+<p>介绍解决哈希碰撞问题前，有一个概念需要了解下：负载系数（loading factor），指的是元素的个数除以数组的容量，因此负载系数一般都在0和1之间，除了开链策略。</p>
+<h2>线性探测 (Linear probing)</h2>
+<p>线性探测指的是，当一个存储对象经过散列函数计算后的索引已经存储了对象，那么就在数组大小的有限空间内向右侧寻找可用的空间（如果到达了数组尾部，再从数组头部开始查找）：</p>
+<img src="https://github.com/user-attachments/assets/9a24d651-7950-48eb-bafa-c0a2fa69c7c9" alt="Image" style="max-width:100%;">
+<p>上图的散列函数就是对数除以10取余，可以看到，虽然采用了散列函数，但是还是会出现最坏的情况，即插入的位置始终有值，因此实际上就退化成了O(N)插入。这种大片连续使用的索引被称为primary clustering，primary clustering导致新插入数据只能不断向前搜寻，不断解决碰撞问题，同时又扩大了primary clustering的影响，简直是恶性循环。</p>
+<h2>二次探测(Quadratic probing)</h2>
+<p>二次探测的提出就是为了解决primary clustering的问题，它的命名是因为解决碰撞的方程式就是一个二次方程： $F(i) = i^2$ ，当发生碰撞时，i以1为基准递增，查找可以使用的索引: $targetIndex = H + F(i)$ ，而不是向线性探测一样 $targetIndex = H + i$ ，探测过程如下所示：</p>
+<img src="https://github.com/user-attachments/assets/02426550-019c-4ea5-9801-5107b04602d0" alt="Image" style="max-width:100%;">
+<p>但是，不管是线性探测还是二次探测，都需要动态增加底层数组的大小，可以通过跟踪负载系数，当负载系数大于0.5时，就扩容。二次探测也有自己的问题，比如多个存储对象的散列值一样，那么每次的探测索引都一样，如果这样的值较多，那就是缩小版的primary clustering问题，也叫secondary clustering。</p>
+<h2>开链</h2>
+<p>开链策略是在每个数组元素中存储一个链表地址，每次散列函数计算后，就将值插入到对应的链表中，这样在插入或者查找时，只需要遍历链表即可。如果链表不长，速度依然不慢。不过此时的负载系数就会大于1，何时扩大数组就是一个问题。STL的 hashtable使用的就是开链法，我们接下来就要窥探STL hashtable的实现。</p>
+<h1>STL的hashtable</h1>
+<h2>hashtable 的桶bucket和节点</h2>
+<img src="https://github.com/user-attachments/assets/8379ac4d-294f-4acd-898d-794ffde72ee0" alt="Image" style="max-width:100%;">
+<p>STL的hashtable是以开链策略完成的，上图形象的描述了开链的实现，我们先看hashtable节点的定义：</p>
+<p>``<code>Cpp</p>
+<p>template <class _Val></p>
+<p>struct _Hashtable_node</p>
+<p>{</p>
+<p>  _Hashtable_node* _M_next;</p>
+<p>  _Val _M_val;</p>
+<p>};  </p>
+</code>`<code>
+<p>可以看到，hashtable的节点实际上是一个链表，这也就是开链的做法。在stl的hashtable中，存储hashtable的数组叫做桶，每个桶中存储了一个hashtable 节点，也就是链表。</p>
+<h2>hashtable的迭代器</h2>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HashFcn,</p>
+<p>          class _ExtractKey, class _EqualKey, class _Alloc></p>
+<p>struct _Hashtable_iterator {</p>
+<p>  typedef hashtable<_Val,_Key,_HashFcn,_ExtractKey,_EqualKey,_Alloc></p>
+<p>          _Hashtable;</p>
+<p>  typedef _Hashtable_iterator<_Val, _Key, _HashFcn, </p>
+<p>                              _ExtractKey, _EqualKey, _Alloc></p>
+<p>          iterator;</p>
+<p>  typedef _Hashtable_const_iterator<_Val, _Key, _HashFcn, </p>
+<p>                                    _ExtractKey, _EqualKey, _Alloc></p>
+<p>          const_iterator;</p>
+<p>  typedef _Hashtable_node<_Val> _Node;</p>
+<p>  typedef forward_iterator_tag iterator_category;</p>
+<p>  typedef _Val value_type;</p>
+<p>  typedef ptrdiff_t difference_type;</p>
+<p>  typedef size_t size_type;</p>
+<p>  typedef _Val& reference;</p>
+<p>  typedef _Val* pointer;</p>
+<p>  _Node* _M_cur;  // 记录当前迭代器所在的节点</p>
+<p>  _Hashtable* _M_ht; // 记录当前迭代器的hashtable归属</p>
+<p>  _Hashtable_iterator(_Node<em> __n, _Hashtable</em> __tab) </p>
+<p>    : _M_cur(__n), _M_ht(__tab) {}</p>
+<p>  _Hashtable_iterator() {}</p>
+<p>  reference operator*() const { return _M_cur->_M_val; }</p>
+<p>#ifndef __SGI_STL_NO_ARROW_OPERATOR</p>
+<p>  pointer operator->() const { return &(operator*()); }</p>
+<p>#endif /<em> __SGI_STL_NO_ARROW_OPERATOR </em>/</p>
+<p>  iterator& operator++(); // forward iterator的递增，可能需要从一个bucket跳到另一个bucket</p>
+<p>  iterator operator++(int);</p>
+<p>  bool operator==(const iterator& __it) const</p>
+<p>    { return _M_cur == __it._M_cur; }</p>
+<p>  bool operator!=(const iterator& __it) const</p>
+<p>    { return _M_cur != __it._M_cur; }</p>
+<p>};</p>
+</code>`<code>
+<p>可以看到，hashtable的迭代器不仅需要记录当前迭代器的位置，还需要记录这个迭代器归属于那个hashtable，因为在迭代器操作中，可能需要从一个桶跳到另一个桶，这就涉及到operator++了。hashtable的迭代器是一个forward iterator，为什么呢？因为链表只能单向递增！所以也就只有operator ++，没有operator--。operator++的实现如下：</p>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HF, class _ExK, class _EqK, </p>
+<p>          class _All></p>
+<p>_Hashtable_iterator<_Val,_Key,_HF,_ExK,_EqK,_All>&</p>
+<p>_Hashtable_iterator<_Val,_Key,_HF,_ExK,_EqK,_All>::operator++()</p>
+<p>{</p>
+<p>  const _Node* __old = _M_cur;  // 记录之前所指向的节点</p>
+<p>  _M_cur = _M_cur->_M_next; // 令cur指向cur的next，如果next不是空，那就证明不需要跳跃bucket，直接返回即可</p>
+<p>  if (!_M_cur) { // 当前桶已经遍历完了， 需要根据旧节点的值计算出当前桶的索引，然后递增桶索引知道找到一个不为空的桶</p>
+<p>    size_type __bucket = _M_ht->_M_bkt_num(__old->_M_val); // 这就是上述的计算旧节点的桶索引</p>
+<p>    while (!_M_cur && ++__bucket < _M_ht->_M_buckets.size())  // cur为空代表是空桶，继续向前计算，但是这里有个疑问，当桶索引遍历完还是没有时，返回的是空，是不是符合预期呢（对应end()?）</p>
+<p>      _M_cur = _M_ht->_M_buckets[__bucket];</p>
+<p>  }</p>
+<p>  return *this;</p>
+<p>}</p>
+</code>`<code>
+<p>const iterator只是限制了修改，因此不再赘述。</p>
+<h2>hashtable的数据结构</h2>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HashFcn,</p>
+<p>          class _ExtractKey, class _EqualKey, class _Alloc></p>
+<p>class hashtable {</p>
+<p>public:</p>
+<p>  typedef _Key key_type;</p>
+<p>  typedef _Val value_type;</p>
+<p>  typedef _HashFcn hasher; </p>
+<p>  typedef _EqualKey key_equal;</p>
+<p>  typedef size_t            size_type;</p>
+<p>  typedef ptrdiff_t         difference_type;</p>
+<p>  typedef value_type*       pointer;</p>
+<p>  typedef const value_type* const_pointer;</p>
+<p>  typedef value_type&       reference;</p>
+<p>  typedef const value_type& const_reference;</p>
+<p>  hasher hash_funct() const { return _M_hash; }</p>
+<p>  key_equal key_eq() const { return _M_equals; }</p>
+<p>private:</p>
+<p>  typedef _Hashtable_node<_Val> _Node; // 节点，bucket存储的类型</p>
+<p>#ifdef __STL_USE_STD_ALLOCATORS</p>
+<p>public:</p>
+<p>  typedef typename _Alloc_traits<_Val,_Alloc>::allocator_type allocator_type;</p>
+<p>  allocator_type get_allocator() const { return _M_node_allocator; }</p>
+<p>private:</p>
+<p>  typename _Alloc_traits<_Node, _Alloc>::allocator_type _M_node_allocator;</p>
+<p>  _Node* _M_get_node() { return _M_node_allocator.allocate(1); }</p>
+<p>  void _M_put_node(_Node* __p) { _M_node_allocator.deallocate(__p, 1); }</p>
+<h1>define __HASH_ALLOC_INIT(__a) _M_node_allocator(__a), </h1>
+<p>#else /<em> __STL_USE_STD_ALLOCATORS </em>/</p>
+<p>public:</p>
+<p>  typedef _Alloc allocator_type;</p>
+<p>  allocator_type get_allocator() const { return allocator_type(); } </p>
+<p>private:</p>
+<p>  typedef simple_alloc<_Node, _Alloc> _M_node_allocator_type;</p>
+<p>  _Node* _M_get_node() { return _M_node_allocator_type::allocate(1); }</p>
+<p>  void _M_put_node(_Node* __p) { _M_node_allocator_type::deallocate(__p, 1); }</p>
+<h1>define __HASH_ALLOC_INIT(__a)</h1>
+<p>#endif /<em> __STL_USE_STD_ALLOCATORS </em>/</p>
+<p>private:</p>
+<p>  hasher                _M_hash;  // 散列函数，支持用户自定义</p>
+<p>  key_equal             _M_equals; // 判断相等函数，支持用户定义</p>
+<p>  _ExtractKey           _M_get_key; </p>
+<p>  vector<_Node*,_Alloc> _M_buckets; // 这就是hashtable的桶了，底层采用vector实现，存储类型是hashtable节点的指针</p>
+<p>  size_type             _M_num_elements; // 有效桶的数目，即装有节点的桶的数量</p>
+<p>//...</p>
+</code>`<code>
+<p>关键成员的含义在上述代码中标注了，模板参数单独说明：</p>
+<p>* _Val： 节点的值类型</p>
+<p>* _Key： 节点的键类型（键和值不一样，键指的是用于计算散列值的输入，值是键对应的值）</p>
+<p>* _HashFcn： 散列函数</p>
+<p>* _ExtractKey：从节点中取出键的方法</p>
+<p>* _EqualKey：键相等的判断方法</p>
+<p>* _Alloc：内存分配管理器，默认使用std::alloc</p>
+<p>在</code>stl_hash_fun.h<code>中已经有多个预定义的hash function，如果需要自定义散列函数，可以参照定义：</p>
+</code>`<code>Cpp
+<p>template <class _Key> struct hash { };</p>
+<p>__STL_TEMPLATE_NULL struct hash<char*></p>
+<p>{</p>
+<p>  size_t operator()(const char* __s) const { return __stl_hash_string(__s); }</p>
+<p>};</p>
+</code>`<code>
+</code>stl_hash_fun.h<code>中定义了模板类hash，并根据不同类型进行了特化，我们自定义类型只需要进行特化即可，如：
+</code>`<code>Cpp
+<p>struct Data {</p>
+<p>std::string name;</p>
+<p>uint8_t age;</p>
+<p>}</p>
+<p>struct hash<Data> {</p>
+<p>size_t operator()(Data data) const {</p>
+<p>    return __stl_hash_string(data.name.data()) + age;</p>
+<p>}</p>
+<p>};</p>
+</code>`<code>
+<p>stl的hashtable的桶的大小，采用的是质数，并且预设了28个大小，以便扩容时使用：</p>
+</code>`<code>Cpp
+<p>// Note: assumes long is at least 32 bits.</p>
+<p>enum { __stl_num_primes = 28 };</p>
+<p>static const unsigned long __stl_prime_list[__stl_num_primes] =</p>
+<p>{</p>
+<p>  53ul,         97ul,         193ul,       389ul,       769ul,</p>
+<p>  1543ul,       3079ul,       6151ul,      12289ul,     24593ul,</p>
+<p>  49157ul,      98317ul,      196613ul,    393241ul,    786433ul,</p>
+<p>  1572869ul,    3145739ul,    6291469ul,   12582917ul,  25165843ul,</p>
+<p>  50331653ul,   100663319ul,  201326611ul, 402653189ul, 805306457ul, </p>
+<p>  1610612741ul, 3221225473ul, 4294967291ul</p>
+<p>};</p>
+<p>inline unsigned long __stl_next_prime(unsigned long __n)</p>
+<p>{</p>
+<p>  const unsigned long* __first = __stl_prime_list;</p>
+<p>  const unsigned long* __last = __stl_prime_list + (int)__stl_num_primes;</p>
+<p>  const unsigned long* pos = lower_bound(__first, __last, __n);</p>
+<p>  return pos == __last ? <em>(__last - 1) : </em>pos;</p>
+<p>}</p>
+</code>`<code>
+<h2>hashtable的插入</h2>
+<p>hashtable的插入可能涉及到resize: 和红黑树一样，hashtable提供了</code>insert_unique<code>和</code>insert_equal<code>两种方法：</p>
+</code>`<code>Cpp
+<p>  pair<iterator, bool> insert_unique(const value_type& __obj)</p>
+<p>  {</p>
+<p>    resize(_M_num_elements + 1);</p>
+<p>    return insert_unique_noresize(__obj);</p>
+<p>  }</p>
+<p>  iterator insert_equal(const value_type& __obj)</p>
+<p>  {</p>
+<p>    resize(_M_num_elements + 1);</p>
+<p>    return insert_equal_noresize(__obj);</p>
+<p>  }</p>
+</code>`<code>
+<p>resize的定义如下：</p>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HF, class _Ex, class _Eq, class _All></p>
+<p>void hashtable<_Val,_Key,_HF,_Ex,_Eq,_All></p>
+<p>  ::resize(size_type __num_elements_hint)</p>
+<p>{</p>
+<p>  const size_type __old_n = _M_buckets.size(); // 桶容量</p>
+<p>  if (__num_elements_hint > __old_n) { // 有效桶 + 1是否大于桶容量</p>
+<p>    const size_type __n = _M_next_size(__num_elements_hint);</p>
+<p>    if (__n > __old_n) {  // 有效桶+1对应的桶容量比当前的桶容量还大，那必须扩容了</p>
+<p>      vector<_Node<em>, _All> __tmp(__n, (_Node</em>)(0),</p>
+<p>                                 _M_buckets.get_allocator()); // 新申请buckets</p>
+<p>      __STL_TRY {</p>
+<p>        for (size_type __bucket = 0; __bucket < __old_n; ++__bucket) {</p>
+<p>          _Node* __first = _M_buckets[__bucket];</p>
+<p>          while (__first) {  // 跳过空桶</p>
+<p>            size_type __new_bucket = _M_bkt_num(__first->_M_val, __n);  // 根据新申请的buckets大小确定搬移节点的桶索引</p>
+<p>            _M_buckets[__bucket] = __first->_M_next;</p>
+<p>            __first->_M_next = __tmp[__new_bucket];</p>
+<p>            __tmp[__new_bucket] = __first;</p>
+<p>            __first = _M_buckets[__bucket];          </p>
+<p>          }</p>
+<p>        }</p>
+<p>        _M_buckets.swap(__tmp); // 搬完在swap</p>
+<p>      }</p>
+<h1>        ifdef __STL_USE_EXCEPTIONS</h1>
+<p>      catch(...) {  // 出现异常就需要把新申请的桶全部释放</p>
+<p>        for (size_type __bucket = 0; __bucket < __tmp.size(); ++__bucket) {</p>
+<p>          while (__tmp[__bucket]) {</p>
+<p>            _Node* __next = __tmp[__bucket]->_M_next;</p>
+<p>            _M_delete_node(__tmp[__bucket]);</p>
+<p>            __tmp[__bucket] = __next;</p>
+<p>          }</p>
+<p>        }</p>
+<p>        throw;</p>
+<p>      }</p>
+<h1>        endif /<em> __STL_USE_EXCEPTIONS </em>/</h1>
+<p>    }</p>
+<p>  }</p>
+<p>}</p>
+</code>`<code>
+<p>只有当下一次的有效桶数目比当前的bucket的size大，并且已经跨越到下一个桶大小时，hashtable才会进行扩大桶。</p>
+<p>真正的插入操作：</p>
+<h3>insert_unique_noresize</h3>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HF, class _Ex, class _Eq, class _All></p>
+<p>pair<typename hashtable<_Val,_Key,_HF,_Ex,_Eq,_All>::iterator, bool> </p>
+<p>hashtable<_Val,_Key,_HF,_Ex,_Eq,_All></p>
+<p>  ::insert_unique_noresize(const value_type& __obj)</p>
+<p>{</p>
+<p>  const size_type __n = _M_bkt_num(__obj); // 先根据值计算桶索引</p>
+<p>  _Node* __first = _M_buckets[__n]; // </p>
+<p> // 如果已经有值了，返回插入失败，和值对应的迭代器</p>
+<p>  for (_Node* __cur = __first; __cur; __cur = __cur->_M_next) </p>
+<p>    if (_M_equals(_M_get_key(__cur->_M_val), _M_get_key(__obj)))</p>
+<p>      return pair<iterator, bool>(iterator(__cur, this), false);</p>
+<p>  _Node* __tmp = _M_new_node(__obj);  // 否则就创建节点</p>
+<p>  __tmp->_M_next = __first; // 注意，新插入的节点，直接插到了链表头</p>
+<p>  _M_buckets[__n] = __tmp;</p>
+<p>  ++_M_num_elements; // 增加节点数目</p>
+<p>  return pair<iterator, bool>(iterator(__tmp, this), true);</p>
+<p>}</p>
+</code>`<code>
+<h3>insert_equal_noresize</h3>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HF, class _Ex, class _Eq, class _All></p>
+<p>typename hashtable<_Val,_Key,_HF,_Ex,_Eq,_All>::iterator </p>
+<p>hashtable<_Val,_Key,_HF,_Ex,_Eq,_All></p>
+<p>  ::insert_equal_noresize(const value_type& __obj)</p>
+<p>{</p>
+<p>  const size_type __n = _M_bkt_num(__obj); // 同样是先计算桶索引</p>
+<p>  _Node* __first = _M_buckets[__n];</p>
+<p>  for (_Node* __cur = __first; __cur; __cur = __cur->_M_next) </p>
+<p>    if (_M_equals(_M_get_key(__cur->_M_val), _M_get_key(__obj))) {</p>
+<p>      _Node* __tmp = _M_new_node(__obj); // 如果有相同的值，就在已有值的下一个节点插入</p>
+<p>      __tmp->_M_next = __cur->_M_next;</p>
+<p>      __cur->_M_next = __tmp;</p>
+<p>      ++_M_num_elements;</p>
+<p>      return iterator(__tmp, this);</p>
+<p>    }</p>
+<p>  _Node* __tmp = _M_new_node(__obj); // 否则在链表头插入</p>
+<p>  __tmp->_M_next = __first;</p>
+<p>  _M_buckets[__n] = __tmp;</p>
+<p>  ++_M_num_elements;</p>
+<p>  return iterator(__tmp, this);</p>
+<p>}</p>
+</code>`<code>
+<h2>hashtable删除节点</h2>
+</code>`<code>Cpp
+<p>template <class _Val, class _Key, class _HF, class _Ex, class _Eq, class _All></p>
+<p>typename hashtable<_Val,_Key,_HF,_Ex,_Eq,_All>::size_type </p>
+<p>hashtable<_Val,_Key,_HF,_Ex,_Eq,_All>::erase(const key_type& __key)</p>
+<p>{</p>
+<p>  const size_type __n = _M_bkt_num_key(__key);</p>
+<p>  _Node* __first = _M_buckets[__n];</p>
+<p>  size_type __erased = 0;</p>
+<p>  if (__first) {</p>
+<p>    _Node* __cur = __first;</p>
+<p>    _Node* __next = __cur->_M_next; // 从桶索引对应的桶的第二个链表节点开始查找删除</p>
+<p>    while (__next) {</p>
+<p>      if (_M_equals(_M_get_key(__next->_M_val), __key)) {</p>
+<p>        __cur->_M_next = __next->_M_next;</p>
+<p>        _M_delete_node(__next);</p>
+<p>        __next = __cur->_M_next;</p>
+<p>        ++__erased;</p>
+<p>        --_M_num_elements;</p>
+<p>      }</p>
+<p>      else {</p>
+<p>        __cur = __next;</p>
+<p>        __next = __cur->_M_next;</p>
+<p>      }</p>
+<p>    }</p>
+<p>    if (_M_equals(_M_get_key(__first->_M_val), __key)) {  // 最后再把链表头情况处理下</p>
+<p>      _M_buckets[__n] = __first->_M_next;</p>
+<p>      _M_delete_node(__first);</p>
+<p>      ++__erased;</p>
+<p>      --_M_num_elements;</p>
+<p>    }</p>
+<p>  }</p>
+<p>  return __erased;</p>
+<p>}</p>
+</code>``
+<p>删除key对应的节点时，因为可能存在多个节点，所以stl的做法时，找到key对应的桶索引，然后从第二个节点开始，超找key，找到就删掉；最后一个情况，如果第一个节点也是key对应的，那就把第一个节点删掉，桶存储下一个节点。之所以从第二个开始删，是为了避免从第一个开始，有多个节点匹配，这样就需要多次改变桶第一个指向的元素。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #106</p>
+    </footer>
+</body>
+</html>

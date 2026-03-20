@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of set - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of set</h1>
+    <p class="date">2025-02-07</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> <span class="label">SGI</span> </div>
+    <hr>
+    <div class="content">
+<p>STL的set容器，其底层使用红黑树实现，关于STL的红黑树，可以参考这篇文章: #100  。从源码中，我们也可以看到：</p>
+<p>``<code>Cpp</p>
+<p>template <class _Key, class _Compare __STL_DEPENDENT_DEFAULT_TMPL(less<_Key>), // less<_Key>表示默认使用递增排序</p>
+<p>          class _Alloc = __STL_DEFAULT_ALLOCATOR(_Key) ></p>
+<p>class set;</p>
+<p>template <class _Key, class _Compare, class _Alloc></p>
+<p>inline bool operator==(const set<_Key,_Compare,_Alloc>& __x, </p>
+<p>                       const set<_Key,_Compare,_Alloc>& __y);</p>
+<p>template <class _Key, class _Compare, class _Alloc></p>
+<p>inline bool operator<(const set<_Key,_Compare,_Alloc>& __x, </p>
+<p>                      const set<_Key,_Compare,_Alloc>& __y);</p>
+<p>template <class _Key, class _Compare, class _Alloc></p>
+<p>class set {</p>
+<p>  // requirements:</p>
+<p>  __STL_CLASS_REQUIRES(_Key, _Assignable);</p>
+<p>  __STL_CLASS_BINARY_FUNCTION_CHECK(_Compare, bool, _Key, _Key);</p>
+<p>public:</p>
+<p>  // typedefs:</p>
+<p>  typedef _Key     key_type;</p>
+<p>  typedef _Key     value_type;</p>
+<p>  typedef _Compare key_compare;</p>
+<p>  typedef _Compare value_compare;</p>
+<p>private:</p>
+<p>  typedef _Rb_tree<key_type, value_type, </p>
+<p>                  _Identity<value_type>, key_compare, _Alloc> _Rep_type;  // 使用_Rb_tree作为底层实现</p>
+<p>  _Rep_type _M_t;  // red-black tree representing set</p>
+<p>public:</p>
+<p>  typedef typename _Rep_type::const_pointer pointer;</p>
+<p>  typedef typename _Rep_type::const_pointer const_pointer;</p>
+<p>  typedef typename _Rep_type::const_reference reference;</p>
+<p>  typedef typename _Rep_type::const_reference const_reference;</p>
+<p>  typedef typename _Rep_type::const_iterator iterator;</p>
+<p>  typedef typename _Rep_type::const_iterator const_iterator;</p>
+<p>  typedef typename _Rep_type::const_reverse_iterator reverse_iterator;</p>
+<p>  typedef typename _Rep_type::const_reverse_iterator const_reverse_iterator;</p>
+<p>  typedef typename _Rep_type::size_type size_type;</p>
+<p>  typedef typename _Rep_type::difference_type difference_type;</p>
+<p>  typedef typename _Rep_type::allocator_type allocator_type;</p>
+<p>  // allocation/deallocation</p>
+<p>  set() : _M_t(_Compare(), allocator_type()) {}</p>
+<p>  explicit set(const _Compare& __comp,</p>
+<p>               const allocator_type& __a = allocator_type())</p>
+<p>    : _M_t(__comp, __a) {}</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _InputIterator></p>
+<p>  set(_InputIterator __first, _InputIterator __last)</p>
+<p>    : _M_t(_Compare(), allocator_type())</p>
+<p>    { _M_t.insert_unique(__first, __last); }  // set的insert只能是insert_unique</p>
+<p>  template <class _InputIterator></p>
+<p>  set(_InputIterator __first, _InputIterator __last, const _Compare& __comp,</p>
+<p>      const allocator_type& __a = allocator_type())</p>
+<p>    : _M_t(__comp, __a) { _M_t.insert_unique(__first, __last); }</p>
+<p>#else</p>
+<p>  set(const value_type<em> __first, const value_type</em> __last) </p>
+<p>    : _M_t(_Compare(), allocator_type()) </p>
+<p>    { _M_t.insert_unique(__first, __last); }</p>
+<p>  set(const value_type* __first, </p>
+<p>      const value_type* __last, const _Compare& __comp,</p>
+<p>      const allocator_type& __a = allocator_type())</p>
+<p>    : _M_t(__comp, __a) { _M_t.insert_unique(__first, __last); }</p>
+<p>  set(const_iterator __first, const_iterator __last)</p>
+<p>    : _M_t(_Compare(), allocator_type()) </p>
+<p>    { _M_t.insert_unique(__first, __last); }</p>
+<p>  set(const_iterator __first, const_iterator __last, const _Compare& __comp,</p>
+<p>      const allocator_type& __a = allocator_type())</p>
+<p>    : _M_t(__comp, __a) { _M_t.insert_unique(__first, __last); }</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  set(const set<_Key,_Compare,_Alloc>& __x) : _M_t(__x._M_t) {}</p>
+<p>  set<_Key,_Compare,_Alloc>& operator=(const set<_Key, _Compare, _Alloc>& __x)</p>
+<p>  { </p>
+<p>    _M_t = __x._M_t; </p>
+<p>    return *this;</p>
+<p>  }</p>
+<p>  // accessors:</p>
+<p>  key_compare key_comp() const { return _M_t.key_comp(); } // 其余操作都是使用的红黑树的操作进行实现</p>
+<p>  value_compare value_comp() const { return _M_t.key_comp(); }</p>
+<p>  allocator_type get_allocator() const { return _M_t.get_allocator(); }</p>
+<p>  iterator begin() const { return _M_t.begin(); }</p>
+<p>  iterator end() const { return _M_t.end(); }</p>
+<p>  reverse_iterator rbegin() const { return _M_t.rbegin(); } </p>
+<p>  reverse_iterator rend() const { return _M_t.rend(); }</p>
+<p>  bool empty() const { return _M_t.empty(); }</p>
+<p>  size_type size() const { return _M_t.size(); }</p>
+<p>  size_type max_size() const { return _M_t.max_size(); }</p>
+<p>  void swap(set<_Key,_Compare,_Alloc>& __x) { _M_t.swap(__x._M_t); }</p>
+<p>  // insert/erase</p>
+<p>  pair<iterator,bool> insert(const value_type& __x) { </p>
+<p>    pair<typename _Rep_type::iterator, bool> __p = _M_t.insert_unique(__x); </p>
+<p>    return pair<iterator, bool>(__p.first, __p.second);</p>
+<p>  }</p>
+<p>  iterator insert(iterator __position, const value_type& __x) {</p>
+<p>    typedef typename _Rep_type::iterator _Rep_iterator;</p>
+<p>    return _M_t.insert_unique((_Rep_iterator&)__position, __x);</p>
+<p>  }</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _InputIterator></p>
+<p>  void insert(_InputIterator __first, _InputIterator __last) {</p>
+<p>    _M_t.insert_unique(__first, __last);</p>
+<p>  }</p>
+<p>#else</p>
+<p>  void insert(const_iterator __first, const_iterator __last) {</p>
+<p>    _M_t.insert_unique(__first, __last);</p>
+<p>  }</p>
+<p>  void insert(const value_type<em> __first, const value_type</em> __last) {</p>
+<p>    _M_t.insert_unique(__first, __last);</p>
+<p>  }</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void erase(iterator __position) { </p>
+<p>    typedef typename _Rep_type::iterator _Rep_iterator;</p>
+<p>    _M_t.erase((_Rep_iterator&)__position); </p>
+<p>  }</p>
+<p>  size_type erase(const key_type& __x) { </p>
+<p>    return _M_t.erase(__x); </p>
+<p>  }</p>
+<p>  void erase(iterator __first, iterator __last) { </p>
+<p>    typedef typename _Rep_type::iterator _Rep_iterator;</p>
+<p>    _M_t.erase((_Rep_iterator&)__first, (_Rep_iterator&)__last); </p>
+<p>  }</p>
+<p>  void clear() { _M_t.clear(); }</p>
+<p>  // set operations:</p>
+<p>  iterator find(const key_type& __x) const { return _M_t.find(__x); }</p>
+<p>  size_type count(const key_type& __x) const {</p>
+<p>    return _M_t.find(__x) == _M_t.end() ? 0 : 1;  // find操作使用的是==操作符</p>
+<p>  }</p>
+<p>  iterator lower_bound(const key_type& __x) const {</p>
+<p>    return _M_t.lower_bound(__x);</p>
+<p>  }</p>
+<p>  iterator upper_bound(const key_type& __x) const {</p>
+<p>    return _M_t.upper_bound(__x); </p>
+<p>  }</p>
+<p>  pair<iterator,iterator> equal_range(const key_type& __x) const {</p>
+<p>    return _M_t.equal_range(__x);</p>
+<p>  }</p>
+<p>#ifdef __STL_TEMPLATE_FRIENDS</p>
+<p>  template <class _K1, class _C1, class _A1></p>
+<p>  friend bool operator== (const set<_K1,_C1,_A1>&, const set<_K1,_C1,_A1>&);</p>
+<p>  template <class _K1, class _C1, class _A1></p>
+<p>  friend bool operator< (const set<_K1,_C1,_A1>&, const set<_K1,_C1,_A1>&);</p>
+<p>#else /<em> __STL_TEMPLATE_FRIENDS </em>/</p>
+<p>  friend bool __STD_QUALIFIER</p>
+<p>  operator== __STL_NULL_TMPL_ARGS (const set&, const set&);</p>
+<p>  friend bool __STD_QUALIFIER</p>
+<p>  operator<  __STL_NULL_TMPL_ARGS (const set&, const set&);</p>
+<p>#endif /<em> __STL_TEMPLATE_FRIENDS </em>/</p>
+<p>};</p>
+</code>`<code>
+<p>可以看到，set实际上是使用了适配器模式，将红黑树适配为一个set，提供给用户使用。不过需要注意的是，STL的红黑树的插入提供了</code>insert_unique<code>和</code>insert_equal<code>两种方法，由于set中每个元素都是唯一的，因此set只能使用</code>insert_unique`插入。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #101</p>
+    </footer>
+</body>
+</html>

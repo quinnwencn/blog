@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[BugRecord] 交叉编译后执行报错`Illegal Instruction` 或者 在main函数前就`Segmentation fault`  - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[BugRecord] 交叉编译后执行报错`Illegal Instruction` 或者 在main函数前就`Segmentation fault` </h1>
+    <p class="date">2024-06-21</p>
+    <div class="labels"><span class="label">bug</span> </div>
+    <hr>
+    <div class="content">
+<h1>背景</h1>
+<p>在一个项目中，我需要开发一个库，提供给第三方使用，具体是提供一个so和一个头文件。我需要在提交前自研功能，按理这是一个非常简单的活，但是由于疏忽，导致在一个很小的问题上耗费了一天多时间，这里记录下.</p>
+<h1>问题</h1>
+<p>在验证时，发生了以下两个错误：</p>
+<img src="https://github.com/quinnwencn/blog/assets/143626366/ea1ae4e0-f54d-48d1-a949-784a3bdd02d2" alt="image" style="max-width:100%;">
+<p>这两个错误并不是有规律出现，同一个二进制，时而是<code>Illegal Instruction</code>，时而是<code>Segmentation fault</code>。因此可以判断不是代码本身存在段错误。我甚至在同级Makefile编译下创建了一个helloworld，结果还是一样的问题：</p>
+<img src="https://github.com/quinnwencn/blog/assets/143626366/9bdc675e-6496-414c-84b8-9754adc3bb1f" alt="image" style="max-width:100%;">
+<p>最后，迫不得已，重新编写Makefile才解决问题。原因是Makefile拷贝自库的编译Makefile，链接是制定了标志:<code>shared</code>，因此导致链接出来的实际上不是可执行文件，而是一个一个库。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #45</p>
+    </footer>
+</body>
+</html>

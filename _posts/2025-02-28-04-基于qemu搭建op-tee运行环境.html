@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>04 基于qemu搭建op-tee运行环境 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>04 基于qemu搭建op-tee运行环境</h1>
+    <p class="date">2025-02-28</p>
+    <div class="labels"><span class="label">TrustZone</span> <span class="label">TEE</span> <span class="label">ARMv8</span> <span class="label">QEMU</span> <span class="label">op-tee</span> </div>
+    <hr>
+    <div class="content">
+<p>#111 介绍了如何在QEMU上模拟SoC启动ATF，以及分析了从BootROM到ATF，最后启动u-boot的过程。TEE的启动在 #111 中并没有实现，因为TEE OS的启动需要涉及ATF对SoC的内存划分，以及启动时序等。不过，OP-TEE有基于QEMU的ARMv8的全套模拟方案，可以实现BL1、BL2、BL31、BL32、BL33和Linux runtime，<a href="https://optee.readthedocs.io/en/latest/building/devices/qemu.html#qemu-v8">OP-TEE QEMU v8</a>.</p>
+<h2>克隆代码</h2>
+<li>工具安装</li>
+<p>OP-TEE使用的是git-repo管理仓库，在下载代码之前，需要先安装repo工具：</p>
+<p>``<code>bash</p>
+<p>$ git clone -b v2.12.2 http://mirrors.ustc.edu.cn/aosp/git-repo.git</p>
+<p>$ chmod u+x git-repo/repo</p>
+<p>$ mkdir -p ~/bin</p>
+<p>$ cp git-repo/repo ~/bin</p>
+<p>$ echo "export PATH=~/bin:$PATH" >> ~/.zshrc  # or ~/.bashrc</p>
+<p>$ source ~/.zshrc</p>
+</code>`<code>
+<li>依赖安装</li>
+<p>OP-TEE的编译依赖于一系列的工具，<a href="https://optee.readthedocs.io/en/latest/building/prerequisites.html">OP-TEE文档</a>列出了这些以来，并且给出了基于Docker的Dockerfile，我们可以根据Dockerfile安装对应依赖（可以选择在Docker里仿真，也可以在host，本文在host进行）</p>
+</code>`<code>bash
+<p>$ sudo apt update -y</p>
+<p>$ sudo apt upgrade -y</p>
+<p>$ sudo apt install -y  \</p>
+<p>    adb \</p>
+<p>    acpica-tools \</p>
+<p>    autoconf \</p>
+<p>    automake \</p>
+<p>    bc \</p>
+<p>    bison \</p>
+<p>    build-essential \</p>
+<p>    ccache \</p>
+<p>    cpio \</p>
+<p>    cscope \</p>
+<p>    curl \</p>
+<p>    device-tree-compiler \</p>
+<p>    e2tools \</p>
+<p>    expect \</p>
+<p>    fastboot \</p>
+<p>    flex \</p>
+<p>    ftp-upload \</p>
+<p>    gdisk \</p>
+<p>    git \</p>
+<p>    libattr1-dev \</p>
+<p>    libcap-ng-dev \</p>
+<p>    libfdt-dev \</p>
+<p>    libftdi-dev \</p>
+<p>    libglib2.0-dev \</p>
+<p>    libgmp3-dev \</p>
+<p>    libhidapi-dev \</p>
+<p>    libmpc-dev \</p>
+<p>    libncurses5-dev \</p>
+<p>    libpixman-1-dev \</p>
+<p>    libslirp-dev \</p>
+<p>    libssl-dev \</p>
+<p>    libtool \</p>
+<p>    libusb-1.0-0-dev \</p>
+<p>    make \</p>
+<p>    mtools \</p>
+<p>    netcat \</p>
+<p>    ninja-build \</p>
+<p>    python3-cryptography \</p>
+<p>    python3-pip \</p>
+<p>    python3-pyelftools \</p>
+<p>    python3-serial \</p>
+<p>    python-is-python3 \</p>
+<p>    rsync \</p>
+<p>    swig \</p>
+<p>    unzip \</p>
+<p>    uuid-dev \</p>
+<p>    wget \</p>
+<p>    xdg-utils \</p>
+<p>    xsltproc \</p>
+<p>    xterm \</p>
+<p>    xz-utils \</p>
+<p>    zlib1g-dev</p>
+</code>`<code>
+<li>下载OP-TEE QEMU仿真环境代码</li>
+</code>`<code>bash
+<p>$ mkdir optee</p>
+<p>$ cd optee</p>
+<p>$ repo init -u https://github.com/OP-TEE/manifest.git -m qemu_v8.xml</p>
+<p>$ repo sync -j8</p>
+</code>`<code>
+<p>下载后的仓库如下所示：</p>
+</code>`<code>bash
+<p>$ tree -L 1 .</p>
+<p>.</p>
+<p>├── build                                 # 解决不同平台之间的Makefile和kconfig</p>
+<p>├── buildroot                          # buildroot编译系统</p>
+<p>├── hafnium                           # Hafnium 是一个开源的可信执行环境（TEE）的 hypervisor，通常用于 Arm 平台</p>
+<p>├── linux                                 # Linux kernel源码</p>
+<p>├── linux-arm-ffa-user           # 与 Arm Firmware Framework for Armv8-A（FF-A）相关的 Linux 用户空间实现 (猜测)</p>
+<p>├── mbedtls                           # 轻量级的ssl/tls加密组件</p>
+<p>├── ms-tpm-20-ref                # 微软的tpm组件</p>
+<p>├── optee_client                    # op-tee的REE侧源码</p>
+<p>├── optee_examples              # op-tee的TA/CA示例代码</p>
+<p>├── optee_ftpm                     # 与 OP-TEE 的 fTPM（Firmware TPM）实现相关</p>
+<p>├── optee_os                         # op-tee的TEE侧源码</p>
+<p>├── optee_rust                      # 基于rust编写的TEE TA/CA框架和例子</p>
+<p>├── optee_test                      # OP-TEE的测试源码</p>
+<p>├── out                                  # 编译输出目录，主要存放用于烧录的image</p>
+<p>├── out-br                             # buildroot编译输出目录</p>
+<p>├── qemu                              # qemu源码</p>
+<p>├── SCP-firmware                 # SCP（System Control Processor）固件，用于管理 Arm 系统的低级硬件功能</p>
+<p>├── toolchains                       # 编译所需工具链</p>
+<p>├── trusted-firmware-a         # atf源码   </p>
+<p>├── trusted-services              # 与 OP-TEE 的可信服务实现相关</p>
+<p>├── u-boot                            # u-boot源码</p>
+<p>└── xen                                 # Xen 是一个开源 hypervisor，用于虚拟化环境</p>
+</code>`<code>
+<p>组件图：</p>
+<img src="https://github.com/user-attachments/assets/96b32d65-9c92-4e38-b276-0002fb2ca473" alt="Image" style="max-width:100%;">
+<p>来源：https://www.trustedfirmware.org/</p>
+<h2>编译和运行</h2>
+<p>OP-TEE仿真平台提供了一键式编译仓库build，它可以自动下载对应的交叉编译器，我们的编译和运行也都是在这个仓库里完成：</p>
+<li>编译</li>
+</code>`<code>bash
+<p>make -j8 toolchains # 下载和编译交叉编译器</p>
+<p>make -j8 # 编译</p>
+<p>···</p>
+<li>运行</li>
+<p>运行就是基于QEMU，运行前面编译好的固件，因此我们使用qemu_v8的配置文件来运行：</p>
+</code>`<code>bash
+<p>make -f qemu_v8.mk run-only</p>
+</code>``
+<p>执行运行后，就可以看到三个terminal窗口：</p>
+<img src="https://github.com/user-attachments/assets/2866d85b-c757-432d-8fce-7fadba8484d1" alt="Image" style="max-width:100%;">
+<p>* make -f qemu_v8.mk run-only：原始命令行terminal，启动了一个gdb调试</p>
+<p>* Normal World：REE侧，运行这buildroot编译出来的runtime</p>
+<p>* Secure World： TEE侧安全世界</p>
+<p>在gdb侧输入c，按回车键，可以触发Normal World和Secure World启动：</p>
+<img src="https://github.com/user-attachments/assets/a2731f32-53b4-4a52-a1b0-b63f192e428e" alt="Image" style="max-width:100%;">
+<p>Normal World:</p>
+<img src="https://github.com/user-attachments/assets/64570e1e-7d6f-4f4d-ad44-d82838305f99" alt="Image" style="max-width:100%;">
+<p>Secure World:</p>
+<img src="https://github.com/user-attachments/assets/0183ad53-f9ac-40c1-ac1c-1c1ab2ec39a9" alt="Image" style="max-width:100%;">
+<p>我们可以在REE侧运行OP-TEE的例子，触发一次CA（Client Application）和TA（Trusted Application）的执行和交互：</p>
+<p>REE:</p>
+<img src="https://github.com/user-attachments/assets/8fb3b372-5fda-4075-b766-70de0814c3a7" alt="Image" style="max-width:100%;">
+<p>TEE:</p>
+<img src="https://github.com/user-attachments/assets/079c096d-3572-4327-92fb-95611f4105dd" alt="Image" style="max-width:100%;">
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #112</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of RB-Tree - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of RB-Tree</h1>
+    <p class="date">2025-01-23</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> <span class="label">SGI</span> </div>
+    <hr>
+    <div class="content">
+<h1>节点定义</h1>
+<p>关于红黑树和二叉树的原理，可以参考这个<a href="https://github.com/quinnwencn/blog/issues/96">Binary Tree</a>, STL中实现了<code>stl_tree.h</code>，里面是红黑树的实现。红黑树具有左右子树，值以及节点颜色这几个成员，STL在这几个基础上，还增加了parent指针，只想节点的父节点，从而实现更好的旋转以及平衡操作：</p>
+<p>``<code>Cpp</p>
+<p>typedef bool _Rb_tree_Color_type;</p>
+<p>const _Rb_tree_Color_type _S_rb_tree_red = false;</p>
+<p>const _Rb_tree_Color_type _S_rb_tree_black = true;</p>
+<p>struct _Rb_tree_node_base</p>
+<p>{</p>
+<p>  typedef _Rb_tree_Color_type _Color_type;</p>
+<p>  typedef _Rb_tree_node_base* _Base_ptr;</p>
+<p>  _Color_type _M_color;   // 节点颜色</p>
+<p>  _Base_ptr _M_parent;    // RB树的许多操作必须知道父节点</p>
+<p>  _Base_ptr _M_left;      // 指向左节点</p>
+<p>  _Base_ptr _M_right;     // 指向右节点</p>
+<p>  // 查找最大最小的极值是很好找的，因为RG-tree也是一个二叉搜索树</p>
+<p>  static _Base_ptr _S_minimum(_Base_ptr __x)</p>
+<p>  {</p>
+<p>    while (__x->_M_left != 0) __x = __x->_M_left;</p>
+<p>    return __x;</p>
+<p>  }</p>
+<p>  static _Base_ptr _S_maximum(_Base_ptr __x)</p>
+<p>  {</p>
+<p>    while (__x->_M_right != 0) __x = __x->_M_right;</p>
+<p>    return __x;</p>
+<p>  }</p>
+<p>};</p>
+</code>`<code>
+<p>上述是红黑树节点的定义，从</code>minimum<code>和</code>maximum<code>的操作来看，红黑树非常容易取得极值，但是这两个函数没有判断x是否为空，应该有其他地方保证在调用前是非空了。</p>
+<p>红黑树的节点分为两层，上述源码是第一层定义，没有包含元素类型，第二层采用模板方式定义了元素类型：</p>
+</code>`<code>Cpp
+<p>template <class _Value></p>
+<p>struct _Rb_tree_node : public _Rb_tree_node_base</p>
+<p>{</p>
+<p>  typedef _Rb_tree_node<_Value>* _Link_type;</p>
+<p>  _Value _M_value_field;   // 节点值</p>
+<p>};</p>
+</code>`<code>
+<h1>迭代器定义</h1>
+<p>二叉树的迭代器都是bidirectional iterator，增加1时，是到右子树的最左的一个左节点，减少1时，是到左子树的最右的一个节点：</p>
+</code>`<code>Cpp
+<p>struct _Rb_tree_base_iterator</p>
+<p>{</p>
+<p>  typedef _Rb_tree_node_base::_Base_ptr _Base_ptr;</p>
+<p>  typedef bidirectional_iterator_tag iterator_category;</p>
+<p>  typedef ptrdiff_t difference_type;</p>
+<p>  _Base_ptr _M_node;</p>
+<p>  void _M_increment()</p>
+<p>  {</p>
+<p>    if (_M_node->_M_right != 0) {  // 有右子树，那就找右子树的最左边的</p>
+<p>      _M_node = _M_node->_M_right;</p>
+<p>      while (_M_node->_M_left != 0)</p>
+<p>        _M_node = _M_node->_M_left;  // 找到右子树的最左边的节点</p>
+<p>    }</p>
+<p>    else { </p>
+<p>      _Base_ptr __y = _M_node->_M_parent;  // 没有右子节点，获取当前节点的父节点</p>
+<p>      while (_M_node == __y->_M_right) {  // 如果当前节点已经是右节点，那么父节点会比当前节点小，因此，要不断上溯，直到找到一个父节点，当前节点不是父节点的右节点</p>
+<p>        _M_node = __y;</p>
+<p>        __y = __y->_M_parent;</p>
+<p>      }</p>
+<p>      if (_M_node->_M_right != __y) // 当前节点不是父节点的右节点时，那么这个父节点就是比当前节点大的最小值</p>
+<p>        _M_node = __y; // 令当前节点，等于当前节点的父节点，就满足了increment</p>
+<p>    }</p>
+<p>  }</p>
+<p>  void _M_decrement()</p>
+<p>  {</p>
+<p>// 由于stl的红黑树用了一个dummy节点作为哨兵节点，并且根节点）的parent指向这个dummy指点，dummy节点的left指向树中最小的节点，right指向树的最大节点，因此很容易得出begin和end，所以要判断节点是不是根节点，只能用node->parent->parent == node 来判断是不是在dummy节点，dummy节点的颜色是红色的</p>
+<p>    if (_M_node->_M_color == _S_rb_tree_red &&</p>
+<p>        _M_node->_M_parent->_M_parent == _M_node) </p>
+<p>      _M_node = _M_node->_M_right; // dummy节点的right就是书中最大的节点</p>
+<p>    else if (_M_node->_M_left != 0) {  // ok，当前节点不是dummy节点，如果当前节点有左子树，那么当前节点decrement就是左子树中最大的值</p>
+<p>      _Base_ptr __y = _M_node->_M_left; // 取得左子树</p>
+<p>      while (__y->_M_right != 0)  //取得左子树的最大值</p>
+<p>        __y = __y->_M_right;</p>
+<p>      _M_node = __y;</p>
+<p>    }</p>
+<p>    else {  // 不是dummy节点，也没有左子树，那就一直找到不是左子树的节点，那个节点就刚好比当前节点小一点</p>
+<p>      _Base_ptr __y = _M_node->_M_parent; // 取得父节点</p>
+<p>      while (_M_node == __y->_M_left) {  // 如果当前节点是父节点的左子节点，继续向上找</p>
+<p>        _M_node = __y;</p>
+<p>        __y = __y->_M_parent;</p>
+<p>      }</p>
+<p>      _M_node = __y;  // 到这里，找到的已经不是左子树了，最差条件下就是到了根节点</p>
+<p>    }</p>
+<p>  }</p>
+<p>};</p>
+</code>`<code>
+<p>这里需要注意的是，STL的红黑树用了一个dummy节点作哨兵，并且标注为红色。所有基于红黑树的容器，如set、map都遵循红黑树的特点，迭代器也需要提供operator++(), operator++(int), operator--(), operator--(int)的操作，这些操作都是基于base 迭代器的increment和decrement完成的。</p>
+<h2>increment</h2>
+<p>我们先看increment，increment有两种情况：</p>
+<p>* 当前节点有右子树</p>
+<p>此时，找到右子树的最小的值，也就是右子树里，左子树的左节点，作为当前节点的increment结果，此时，能保证这个节点是比当前节点大的最小节点</p>
+<p>* 当前节点没有右子树</p>
+<p>此时有两种可能，一个是当前节点是父节点的左子节点，此时，父节点就是increment的下一个节点；另一种是当前节点是父节点的右子节点，那么因为右子节点比父节点要大，只能继续向前，找到不是父节点的右子节点的节点，此时的父节点就是当前节点的increment的下一个节点</p>
+<p>忽略红黑树的颜色，我们可以参考下图：</p>
+<img src="https://github.com/user-attachments/assets/3bbae239-ceb8-47d0-89c3-66150be596f4" alt="Image" style="max-width:100%;">
+<h2>decrement</h2>
+<p>需要补充一点，STL中的红黑树，增加了一个哨兵节点，染成红色，我们管他叫dummy节点，根节点的parent指向dummy节点，dummy节点的left指针指向树中的最小值，dummy节点的right指针指向树中的最大值。迭代器的end实际上就是dummy节点，因此end减去1其实就是到了dummy节点的right指针指向的节点。因此，decrement时有三种情况：</p>
+<li>当前节点位于dummy节点，也就是迭代器的end</li>
+<p>此时是end，因此减一到树的最大值，即dummy节点的right节点即可，需要注意的是，为了判断是否位于dummy节点，stl的判断方式是</code>_M_node->_M_color == _S_rb_tree_red && _M_node->_M_parent->_M_parent == _M_node<code>，这是因为STL中的dummy节点的parent节点指向了红黑树的根节点，而红黑树的根节点的parent也指向了dummy节点。但是，由于红黑树的根节点必须是黑色，因此我们可以根据节点是红色，并且节点的父节点的父节点是自己，来判断是不是dummy节点；同理，根节点的判断就是</code>_M_node->_M_color == _S_rb_tree_black && _M_node->_M_parent->_M_parent == _M_node<code>.</p>
+<li>当前节点有左子节点</li>
+<p>此时当前迭代器减一，实际上就是取左子树中的最大节点，也就是左子树的最右侧节点</p>
+<li>当前节点没有左子树，此时又有两种情形：</li>
+<p>   *  当前节点是父节点的右节点：此时decrement实际上就是父节点</p>
+<p>   *  当前节点是父节点的左子节点：向上查找，找到第一个不是父节点的左子节点，就是当前子树的是父节点的右子树，此时的父节点就是目标值</p>
+<img src="https://github.com/user-attachments/assets/89d07331-403a-4230-93a5-e0b8fa8c65e1" alt="Image" style="max-width:100%;">
+<p>红黑树的迭代器也是使用了两层类实现，上述实现的是base iterator，实际的iterator基于上述的base iterator，实现了operator++和operator--等：</p>
+</code>`<code>Cpp
+<p>template <class _Value, class _Ref, class _Ptr></p>
+<p>struct _Rb_tree_iterator : public _Rb_tree_base_iterator</p>
+<p>{</p>
+<p>  typedef _Value value_type;</p>
+<p>  typedef _Ref reference;</p>
+<p>  typedef _Ptr pointer;</p>
+<p>  typedef _Rb_tree_iterator<_Value, _Value&, _Value*>             </p>
+<p>    iterator;</p>
+<p>  typedef _Rb_tree_iterator<_Value, const _Value&, const _Value*> </p>
+<p>    const_iterator;</p>
+<p>  typedef _Rb_tree_iterator<_Value, _Ref, _Ptr>                   </p>
+<p>    _Self;</p>
+<p>  typedef _Rb_tree_node<_Value>* _Link_type;</p>
+<p>  _Rb_tree_iterator() {}</p>
+<p>  _Rb_tree_iterator(_Link_type __x) { _M_node = __x; }</p>
+<p>  _Rb_tree_iterator(const iterator& __it) { _M_node = __it._M_node; }</p>
+<p>  reference operator*() const { return _Link_type(_M_node)->_M_value_field; }</p>
+<p>#ifndef __SGI_STL_NO_ARROW_OPERATOR</p>
+<p>  pointer operator->() const { return &(operator*()); }</p>
+<p>#endif /<em> __SGI_STL_NO_ARROW_OPERATOR </em>/</p>
+<p>  _Self& operator++() { _M_increment(); return *this; }</p>
+<p>  _Self operator++(int) {</p>
+<p>    _Self __tmp = *this;</p>
+<p>    _M_increment();</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>  _Self& operator--() { _M_decrement(); return *this; }</p>
+<p>  _Self operator--(int) {</p>
+<p>    _Self __tmp = *this;</p>
+<p>    _M_decrement();</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>};</p>
+</code>`<code>
+<h1>红黑树定义</h1>
+<p>红黑树的定义同样采用两层结构，第一层是base，只定义了基本的节点成员以及成员的构造和西沟函数：</p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>struct _Rb_tree_base</p>
+<p>{</p>
+<p>  typedef _Alloc allocator_type;</p>
+<p>  allocator_type get_allocator() const { return allocator_type(); }</p>
+<p>  _Rb_tree_base(const allocator_type&) </p>
+<p>    : _M_header(0) { _M_header = _M_get_node(); }</p>
+<p>  ~_Rb_tree_base() { _M_put_node(_M_header); }</p>
+<p>protected:</p>
+<p>  _Rb_tree_node<_Tp>* _M_header;</p>
+<p>  typedef simple_alloc<_Rb_tree_node<_Tp>, _Alloc> _Alloc_type;</p>
+<p>  _Rb_tree_node<_Tp>* _M_get_node()</p>
+<p>    { return _Alloc_type::allocate(1); }</p>
+<p>  void _M_put_node(_Rb_tree_node<_Tp>* __p)</p>
+<p>    { _Alloc_type::deallocate(__p, 1); }</p>
+<p>};</p>
+</code>`<code>
+<p>第二层才是真正的红黑树定义，其他使用红黑树作为底层存储的容器，都是用这一层的定义：</p>
+</code>`<code>Cpp
+<p>template <class _Key, class _Value, class _KeyOfValue, class _Compare,</p>
+<p>          class _Alloc = __STL_DEFAULT_ALLOCATOR(_Value) ></p>
+<p>class _Rb_tree : protected _Rb_tree_base<_Value, _Alloc> {</p>
+<p>  typedef _Rb_tree_base<_Value, _Alloc> _Base;</p>
+<p>protected:</p>
+<p>  typedef _Rb_tree_node_base* _Base_ptr;</p>
+<p>  typedef _Rb_tree_node<_Value> _Rb_tree_node;</p>
+<p>  typedef _Rb_tree_Color_type _Color_type;</p>
+<p>public:</p>
+<p>  typedef _Key key_type;</p>
+<p>  typedef _Value value_type;</p>
+<p>  typedef value_type* pointer;</p>
+<p>  typedef const value_type* const_pointer;</p>
+<p>  typedef value_type& reference;</p>
+<p>  typedef const value_type& const_reference;</p>
+<p>  typedef _Rb_tree_node* _Link_type;</p>
+<p>  typedef size_t size_type;</p>
+<p>  typedef ptrdiff_t difference_type;</p>
+<p>  typedef typename _Base::allocator_type allocator_type;</p>
+<p>  allocator_type get_allocator() const { return _Base::get_allocator(); }</p>
+<p>protected:</p>
+<p>#ifdef __STL_USE_NAMESPACES</p>
+<p>  using _Base::_M_get_node;</p>
+<p>  using _Base::_M_put_node;</p>
+<p>  using _Base::_M_header;</p>
+<p>#endif /<em> __STL_USE_NAMESPACES </em>/</p>
+<p>protected:</p>
+<p>  _Link_type _M_create_node(const value_type& __x)</p>
+<p>  {</p>
+<p>    _Link_type __tmp = _M_get_node();  // 使用base的方式申请内存，实际上使用的仍然是次级内存分配器</p>
+<p>    __STL_TRY {</p>
+<p>      construct(&__tmp->_M_value_field, __x);</p>
+<p>    }</p>
+<p>    __STL_UNWIND(_M_put_node(__tmp));</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>  _Link_type _M_clone_node(_Link_type __x)</p>
+<p>  {</p>
+<p>    _Link_type __tmp = _M_create_node(__x->_M_value_field);</p>
+<p>    __tmp->_M_color = __x->_M_color;</p>
+<p>    __tmp->_M_left = 0;</p>
+<p>    __tmp->_M_right = 0;</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>  void destroy_node(_Link_type __p)</p>
+<p>  {</p>
+<p>    destroy(&__p->_M_value_field);</p>
+<p>    _M_put_node(__p);</p>
+<p>  }</p>
+<p>protected:</p>
+<p>  size_type _M_node_count; // keeps track of size of tree</p>
+<p>  _Compare _M_key_compare;</p>
+<p>  _Link_type& _M_root() const </p>
+<p>    { return (_Link_type&) _M_header->_M_parent; }</p>
+<p>  _Link_type& _M_leftmost() const </p>
+<p>    { return (_Link_type&) _M_header->_M_left; }</p>
+<p>  _Link_type& _M_rightmost() const </p>
+<p>    { return (_Link_type&) _M_header->_M_right; }</p>
+<p>  static _Link_type& _S_left(_Link_type __x)</p>
+<p>    { return (_Link_type&)(__x->_M_left); }</p>
+<p>  static _Link_type& _S_right(_Link_type __x)</p>
+<p>    { return (_Link_type&)(__x->_M_right); }</p>
+<p>  static _Link_type& _S_parent(_Link_type __x)</p>
+<p>    { return (_Link_type&)(__x->_M_parent); }</p>
+<p>  static reference _S_value(_Link_type __x)</p>
+<p>    { return __x->_M_value_field; }</p>
+<p>  static const _Key& _S_key(_Link_type __x)</p>
+<p>    { return _KeyOfValue()(_S_value(__x)); }</p>
+<p>  static _Color_type& _S_color(_Link_type __x)</p>
+<p>    { return (_Color_type&)(__x->_M_color); }</p>
+<p>  static _Link_type& _S_left(_Base_ptr __x)</p>
+<p>    { return (_Link_type&)(__x->_M_left); }</p>
+<p>  static _Link_type& _S_right(_Base_ptr __x)</p>
+<p>    { return (_Link_type&)(__x->_M_right); }</p>
+<p>  static _Link_type& _S_parent(_Base_ptr __x)</p>
+<p>    { return (_Link_type&)(__x->_M_parent); }</p>
+<p>  static reference _S_value(_Base_ptr __x)</p>
+<p>    { return ((_Link_type)__x)->_M_value_field; }</p>
+<p>  static const _Key& _S_key(_Base_ptr __x)</p>
+<p>    { return _KeyOfValue()(_S_value(_Link_type(__x)));} </p>
+<p>  static _Color_type& _S_color(_Base_ptr __x)</p>
+<p>    { return (_Color_type&)(_Link_type(__x)->_M_color); }</p>
+<p>  static _Link_type _S_minimum(_Link_type __x) </p>
+<p>    { return (_Link_type)  _Rb_tree_node_base::_S_minimum(__x); }</p>
+<p>  static _Link_type _S_maximum(_Link_type __x)</p>
+<p>    { return (_Link_type) _Rb_tree_node_base::_S_maximum(__x); }</p>
+<p>public:</p>
+<p>  typedef _Rb_tree_iterator<value_type, reference, pointer> iterator;</p>
+<p>  typedef _Rb_tree_iterator<value_type, const_reference, const_pointer> </p>
+<p>          const_iterator;</p>
+<p>#ifdef __STL_CLASS_PARTIAL_SPECIALIZATION</p>
+<p>  typedef reverse_iterator<const_iterator> const_reverse_iterator;</p>
+<p>  typedef reverse_iterator<iterator> reverse_iterator;</p>
+<p>#else /<em> __STL_CLASS_PARTIAL_SPECIALIZATION </em>/</p>
+<p>  typedef reverse_bidirectional_iterator<iterator, value_type, reference,</p>
+<p>                                         difference_type></p>
+<p>          reverse_iterator; </p>
+<p>  typedef reverse_bidirectional_iterator<const_iterator, value_type,</p>
+<p>                                         const_reference, difference_type></p>
+<p>          const_reverse_iterator;</p>
+<p>#endif /<em> __STL_CLASS_PARTIAL_SPECIALIZATION </em>/ </p>
+<p>private:</p>
+<p>  iterator _M_insert(_Base_ptr __x, _Base_ptr __y, const value_type& __v);</p>
+<p>  _Link_type _M_copy(_Link_type __x, _Link_type __p);</p>
+<p>  void _M_erase(_Link_type __x);</p>
+<p>public:</p>
+<p>                                // allocation/deallocation</p>
+<p>  _Rb_tree()</p>
+<p>    : _Base(allocator_type()), _M_node_count(0), _M_key_compare()   // 此时只申请了一个节点，即dummy节点</p>
+<p>    { _M_empty_initialize(); }  // empty initialize就是初始化dummy节点，颜色为红色</p>
+<p>  _Rb_tree(const _Compare& __comp)</p>
+<p>    : _Base(allocator_type()), _M_node_count(0), _M_key_compare(__comp) </p>
+<p>    { _M_empty_initialize(); }</p>
+<p>  _Rb_tree(const _Compare& __comp, const allocator_type& __a)</p>
+<p>    : _Base(__a), _M_node_count(0), _M_key_compare(__comp) </p>
+<p>    { _M_empty_initialize(); }</p>
+<p>  _Rb_tree(const _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>& __x)   // 拷贝构造函数</p>
+<p>    : _Base(__x.get_allocator()),</p>
+<p>      _M_node_count(0), _M_key_compare(__x._M_key_compare)</p>
+<p>  { </p>
+<p>    if (__x._M_root() == 0)</p>
+<p>      _M_empty_initialize();</p>
+<p>    else {</p>
+<p>      _S_color(_M_header) = _S_rb_tree_red;   // 初始化dummy节点的颜色</p>
+<p>      _M_root() = _M_copy(__x._M_root(), _M_header);  // 深拷贝红黑树，需要每个节点进行构造，并拷贝</p>
+<p>      _M_leftmost() = _S_minimum(_M_root());  // 更新最小值和最大值</p>
+<p>      _M_rightmost() = _S_maximum(_M_root());</p>
+<p>    }</p>
+<p>    _M_node_count = __x._M_node_count;</p>
+<p>  }</p>
+<p>  ~_Rb_tree() { clear(); } // 析构</p>
+<p>  _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>& </p>
+<p>  operator=(const _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>& __x);</p>
+<p>private:</p>
+<p>  void _M_empty_initialize() {</p>
+<p>    _S_color(_M_header) = _S_rb_tree_red; // used to distinguish header from </p>
+<p>                                          // __root, in iterator.operator++</p>
+<p>    _M_root() = 0;</p>
+<p>    _M_leftmost() = _M_header;  // 空树时，最小值和最大值都指向dummy节点</p>
+<p>    _M_rightmost() = _M_header;</p>
+<p>  }</p>
+<p>public:    </p>
+<p>                                // accessors:</p>
+<p>  _Compare key_comp() const { return _M_key_compare; }</p>
+<p>  iterator begin() { return _M_leftmost(); }</p>
+<p>  const_iterator begin() const { return _M_leftmost(); }</p>
+<p>  iterator end() { return _M_header; }</p>
+<p>  const_iterator end() const { return _M_header; }</p>
+<p>  reverse_iterator rbegin() { return reverse_iterator(end()); }</p>
+<p>  const_reverse_iterator rbegin() const { </p>
+<p>    return const_reverse_iterator(end()); </p>
+<p>  }</p>
+<p>  reverse_iterator rend() { return reverse_iterator(begin()); }</p>
+<p>  const_reverse_iterator rend() const { </p>
+<p>    return const_reverse_iterator(begin());</p>
+<p>  } </p>
+<p>  bool empty() const { return _M_node_count == 0; }</p>
+<p>  size_type size() const { return _M_node_count; }</p>
+<p>  size_type max_size() const { return size_type(-1); }</p>
+<p>  void swap(_Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>& __t) {</p>
+<p>    __STD::swap(_M_header, __t._M_header);</p>
+<p>    __STD::swap(_M_node_count, __t._M_node_count);</p>
+<p>    __STD::swap(_M_key_compare, __t._M_key_compare);</p>
+<p>  }</p>
+<p>public:</p>
+<p>                                // insert/erase</p>
+<p>  pair<iterator,bool> insert_unique(const value_type& __x);</p>
+<p>  iterator insert_equal(const value_type& __x);</p>
+<p>  // 将x插入到RB-tree中（保持节点值独一无二），用于map</p>
+<p>  iterator insert_unique(iterator __position, const value_type& __x);</p>
+<p>  // 将x插入到RB-tree中（允许节点重复）， 用于multiple_map</p>
+<p>  iterator insert_equal(iterator __position, const value_type& __x);</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES  </p>
+<p>  template <class _InputIterator></p>
+<p>  void insert_unique(_InputIterator __first, _InputIterator __last);</p>
+<p>  template <class _InputIterator></p>
+<p>  void insert_equal(_InputIterator __first, _InputIterator __last);</p>
+<p>#else /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void insert_unique(const_iterator __first, const_iterator __last);</p>
+<p>  void insert_unique(const value_type<em> __first, const value_type</em> __last);</p>
+<p>  void insert_equal(const_iterator __first, const_iterator __last);</p>
+<p>  void insert_equal(const value_type<em> __first, const value_type</em> __last);</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void erase(iterator __position);</p>
+<p>  size_type erase(const key_type& __x);</p>
+<p>  void erase(iterator __first, iterator __last);</p>
+<p>  void erase(const key_type<em> __first, const key_type</em> __last);</p>
+<p>  void clear() {</p>
+<p>    if (_M_node_count != 0) {</p>
+<p>      _M_erase(_M_root());</p>
+<p>      _M_leftmost() = _M_header;</p>
+<p>      _M_root() = 0;</p>
+<p>      _M_rightmost() = _M_header;</p>
+<p>      _M_node_count = 0;</p>
+<p>    }</p>
+<p>  }      </p>
+<p>public:</p>
+<p>                                // set operations:</p>
+<p>  iterator find(const key_type& __x);</p>
+<p>  const_iterator find(const key_type& __x) const;</p>
+<p>  size_type count(const key_type& __x) const;</p>
+<p>  iterator lower_bound(const key_type& __x);</p>
+<p>  const_iterator lower_bound(const key_type& __x) const;</p>
+<p>  iterator upper_bound(const key_type& __x);</p>
+<p>  const_iterator upper_bound(const key_type& __x) const;</p>
+<p>  pair<iterator,iterator> equal_range(const key_type& __x);</p>
+<p>  pair<const_iterator, const_iterator> equal_range(const key_type& __x) const;</p>
+<p>public:</p>
+<p>                                // Debugging.</p>
+<p>  bool __rb_verify() const;</p>
+<p>};</p>
+</code>`<code>
+<p>拷贝构造的实现：</p>
+</code>`<code>Cpp
+<p>template <class _Key, class _Val, class _KoV, class _Compare, class _Alloc></p>
+<p>typename _Rb_tree<_Key, _Val, _KoV, _Compare, _Alloc>::_Link_type </p>
+<p>_Rb_tree<_Key,_Val,_KoV,_Compare,_Alloc></p>
+<p>  ::_M_copy(_Link_type __x, _Link_type __p)</p>
+<p>{</p>
+<p>                        // structural copy.  __x and __p must be non-null.</p>
+<p>  _Link_type __top = _M_clone_node(__x);  // 申请真正的根节点</p>
+<p>  __top->_M_parent = __p; // 根节点的parent指向dummy节点</p>
+<p>  __STL_TRY {</p>
+<p>    if (__x->_M_right) // 右节点不为空</p>
+<p>      __top->_M_right = _M_copy(_S_right(__x), __top);  // 递归拷贝右节点</p>
+<p>    __p = __top; // top是root，因此我们使用p来充当current节点</p>
+<p>    __x = _S_left(__x); </p>
+<p>    while (__x != 0) {</p>
+<p>      _Link_type __y = _M_clone_node(__x);  // 如果左节点不为空，拷贝左节点</p>
+<p>      __p->_M_left = __y;  // 更新current节点的左子节点</p>
+<p>      __y->_M_parent = __p; // 左子节点指向父节点</p>
+<p>      if (__x->_M_right)</p>
+<p>        __y->_M_right = _M_copy(_S_right(__x), __y); // 递归处理左子节点的右子节点</p>
+<p>      __p = __y;</p>
+<p>      __x = _S_left(__x);</p>
+<p>    }</p>
+<p>  }</p>
+<p>  __STL_UNWIND(_M_erase(__top));</p>
+<p>  return __top;</p>
+<p>}</p>
+</code>`<code>
+<h2>红黑树插入元素</h2>
+<p>STL提供了map和multiple_map， 以及set和multiple_set两种不同的容器，底层都是红黑树，区别在于是否可以插入重复元素，因此红黑树必须提供插入相同元素和不同元素的功能。</p>
+<h3>允许插入相同元素</h3>
+</code>`<code>Cpp
+<p>// 插入新值：节点键值允许重复</p>
+<p>// 返回值是一个指向新增节点的迭代器。</p>
+<p>template <class _Key, class _Value, class _KeyOfValue, </p>
+<p>          class _Compare, class _Alloc></p>
+<p>typename _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>::iterator</p>
+<p>_Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc></p>
+<p>  ::insert_equal(const _Value& __v)</p>
+<p>{</p>
+<p>  _Link_type __y = _M_header;</p>
+<p>  _Link_type __x = _M_root();</p>
+<p>  while (__x != 0) {</p>
+<p>    __y = __x;</p>
+<p>    __x = _M_key_compare(_KeyOfValue()(__v), _S_key(__x)) ? </p>
+<p>            _S_left(__x) : _S_right(__x);</p>
+<p>  }</p>
+<p>  // __x是新插入点，__y是插入点的父节点，__v是新值</p>
+<p>  return _M_insert(__x, __y, __v);</p>
+<p>}</p>
+</code>`<code>
+<h3>插入唯一元素</h3>
+</code>`<code>Cpp
+<p>template <class _Key, class _Value, class _KeyOfValue, </p>
+<p>          class _Compare, class _Alloc></p>
+<p>pair<typename _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>::iterator, </p>
+<p>     bool></p>
+<p>_Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc></p>
+<p>  ::insert_unique(const _Value& __v)</p>
+<p>{</p>
+<p>  _Link_type __y = _M_header;</p>
+<p>  _Link_type __x = _M_root();  // find from root</p>
+<p>  bool __comp = true;</p>
+<p>  while (__x != 0) {</p>
+<p>    __y = __x;</p>
+<p>    __comp = _M_key_compare(_KeyOfValue()(__v), _S_key(__x)); // v的值是否小于x节点的值</p>
+<p>    __x = __comp ? _S_left(__x) : _S_right(__x);  // comp为true表示小于，到左子树里查找；大于则从右子树查找</p>
+<p>  }</p>
+<p>  iterator __j = iterator(__y);   // 把__j作为插入节点的父节点</p>
+<p>  // 如果__comp = true，表示将插入左侧</p>
+<p>  if (__comp)</p>
+<p>    if (__j == begin())    // 表示插入节点的父节点是最左节点 </p>
+<p>      return pair<iterator,bool>(_M_insert(__x, __y, __v), true);</p>
+<p>    else</p>
+<p>      --__j;</p>
+<p>  // 小于新值，将在右侧插入。</p>
+<p>  if (_M_key_compare(_S_key(__j._M_node), _KeyOfValue()(__v)))</p>
+<p>    return pair<iterator,bool>(_M_insert(__x, __y, __v), true);</p>
+<p>  // 此处表示新值一定与树中的键值重复，那么就不插入新值。</p>
+<p>  return pair<iterator,bool>(__j, false);</p>
+<p>}</p>
+</code>`<code>
+<p>可以看出，不管是允许插入相同元素，还是不允许插入相同元素，最后都是使用</code>_M_insert<code>完成插入操作，这个函数的实现如下：</p>
+</code>`<code>Cpp
+<p>template <class _Key, class _Value, class _KeyOfValue, </p>
+<p>          class _Compare, class _Alloc></p>
+<p>typename _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>::iterator</p>
+<p>_Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc></p>
+<p>  ::_M_insert(_Base_ptr __x_, _Base_ptr __y_, const _Value& __v)</p>
+<p>{</p>
+<p>    // 参数__x_是新值插入点，__y_是插入点的父节点，__v是要插入的值</p>
+<p>  _Link_type __x = (_Link_type) __x_;</p>
+<p>  _Link_type __y = (_Link_type) __y_;</p>
+<p>  _Link_type __z;</p>
+<p>  if (__y == _M_header || __x != 0 || </p>
+<p>      _M_key_compare(_KeyOfValue()(__v), _S_key(__y))) {  // 如果插入位置的父节点是dummy节点，或者插入位置不是父节点且不为空，又或者插入位置不是父节点，插入位置为空，v又比父节点要小</p>
+<p>    __z = _M_create_node(__v);  // 创建节点</p>
+<p>    _S_left(__y) = __z;               // also makes _M_leftmost() = __z </p>
+<p>                                      //    when __y == _M_header</p>
+<p>    if (__y == _M_header) {</p>
+<p>      _M_root() = __z; // 如果y是dummy节点，新插入的位置就是root</p>
+<p>      _M_rightmost() = __z; // 最大是插入的节点</p>
+<p>    }</p>
+<p>    else if (__y == _M_leftmost()) // 如果y已经是最小值了，那么新插入的节点肯定是新的最小值</p>
+<p>      _M_leftmost() = __z;   // maintain _M_leftmost() pointing to min node</p>
+<p>  }</p>
+<p>  else {   // y 不是dummy节点，并且x是空指针，v也比y大，难就插入到y的右节点</p>
+<p>    __z = _M_create_node(__v);</p>
+<p>    _S_right(__y) = __z;</p>
+<p>    if (__y == _M_rightmost())  </p>
+<p>      _M_rightmost() = __z;  // maintain _M_rightmost() pointing to max node</p>
+<p>  }</p>
+<p>   // 完成插入后，更新必要信息，并进行红黑树的重平衡</p>
+<p>  _S_parent(__z) = __y;</p>
+<p>  _S_left(__z) = 0;</p>
+<p>  _S_right(__z) = 0;</p>
+<p>  _Rb_tree_rebalance(__z, _M_header->_M_parent);</p>
+<p>  ++_M_node_count;</p>
+<p>  return iterator(__z);</p>
+<p>}</p>
+</code>`<code>
+<h2>红黑树重调整</h2>
+<p>二叉搜索树的插入和删除按照搜索二叉树的方式都可以很快完成，如果只是AVL树，那么重平衡也可以按照旋转完成，但是结合上红黑树的着色技巧，那么红黑树的重平衡就变得更复杂了，需要结合旋转和着色完成。STL中，相关的操作在</code>_Rb_tree_rebalance<code>：</p>
+</code>`<code>Cpp
+<p>inline void </p>
+<p>_Rb_tree_rebalance(_Rb_tree_node_base<em> __x, _Rb_tree_node_base</em>& __root)</p>
+<p>{</p>
+<p>  __x->_M_color = _S_rb_tree_red;   // 新节点必须是红色</p>
+<p>  while (__x != __root && __x->_M_parent->_M_color == _S_rb_tree_red) {  // 循环修复，到最后如果root也是红色，直接改黑色就行</p>
+<p>    if (__x->_M_parent == __x->_M_parent->_M_parent->_M_left) {  // 插入节点的父节点是祖父节点的左子节点</p>
+<p>      _Rb_tree_node_base* __y = __x->_M_parent->_M_parent->_M_right;</p>
+<p>      if (__y && __y->_M_color == _S_rb_tree_red) {  // 叔叔节点的颜色是红色</p>
+<p>        __x->_M_parent->_M_color = _S_rb_tree_black; // 将父节点和叔叔节点的颜色都改成黑色，祖父节点改成红色，然后向上循环修复，直到满足条件或者到root</p>
+<p>        __y->_M_color = _S_rb_tree_black;</p>
+<p>        __x->_M_parent->_M_parent->_M_color = _S_rb_tree_red;</p>
+<p>        __x = __x->_M_parent->_M_parent;</p>
+<p>      }</p>
+<p>      else {  // 没有叔叔节点或者叔叔节点是黑色</p>
+<p>        if (__x == __x->_M_parent->_M_right) { // 如果当前节点是父节点的右节点</p>
+<p>          __x = __x->_M_parent;  </p>
+<p>          _Rb_tree_rotate_left(__x, __root);  // 对父节点进行左旋</p>
+<p>        }</p>
+<p>        __x->_M_parent->_M_color = _S_rb_tree_black;  // 将x的父节点改成黑色</p>
+<p>        __x->_M_parent->_M_parent->_M_color = _S_rb_tree_red; // 祖父节点改成红色</p>
+<p>        _Rb_tree_rotate_right(__x->_M_parent->_M_parent, __root); // 对组父节点进行右旋</p>
+<p>      }</p>
+<p>    }</p>
+<p>    else {  // 父节点是祖父节点的右子节点</p>
+<p>      _Rb_tree_node_base* __y = __x->_M_parent->_M_parent->_M_left;</p>
+<p>      if (__y && __y->_M_color == _S_rb_tree_red) { // 叔叔节点是红色的话</p>
+<p>        __x->_M_parent->_M_color = _S_rb_tree_black;  // 父节点和叔叔节点的颜色改成黑色</p>
+<p>        __y->_M_color = _S_rb_tree_black;</p>
+<p>        __x->_M_parent->_M_parent->_M_color = _S_rb_tree_red; // 祖父节点改成红色</p>
+<p>        __x = __x->_M_parent->_M_parent; // 向上循环修复，和父节点是左子节点的情况类似</p>
+<p>      }</p>
+<p>      else { // 没有叔叔节点，或者叔叔节点是黑色</p>
+<p>        if (__x == __x->_M_parent->_M_left) { // 如果当前节点是父节点的左子节点</p>
+<p>          __x = __x->_M_parent;</p>
+<p>          _Rb_tree_rotate_right(__x, __root);  // 先对父节点进行右旋</p>
+<p>        }</p>
+<p>        __x->_M_parent->_M_color = _S_rb_tree_black; // 然后将父节点改成黑色</p>
+<p>        __x->_M_parent->_M_parent->_M_color = _S_rb_tree_red; // 将祖父节点改成红色</p>
+<p>        _Rb_tree_rotate_left(__x->_M_parent->_M_parent, __root); // 对祖父节点进行左旋</p>
+<p>      }</p>
+<p>    }</p>
+<p>  }</p>
+<p>  __root->_M_color = _S_rb_tree_black;   // 根节点永远为黑</p>
+<p>}</p>
+</code>`<code>
+<p>可以看到，红黑树的重平衡只有在父节点是红色才会触发，此时又分为两种情况：</p>
+<p>* 父节点是祖父节点的左子节点</p>
+<p>此时，根据叔叔节点的颜色，又分为两种情况：</p>
+<p>    * 叔叔节点是红色</p>
+<p>    重平衡的操作：先将父节点和叔叔节点的颜色改成黑色，祖父节点颜色改成红色，然后循环向上重平衡</p>
+<img src="https://github.com/user-attachments/assets/8aaa1579-6ec2-4403-a945-d76e2e8e6184" alt="image" style="max-width:100%;">
+<p>    * 叔叔节点是黑色（空节点也认为是黑色）</p>
+<p>此时，如果当前节点是父节点的右子节点，需要先对父节点进行一次左旋，然后在将父节点改成黑色，祖父节点改成红色，最后再进行一次右旋：</p>
+<img src="https://github.com/user-attachments/assets/137e77bb-8a03-4288-82fe-e98265ef9068" alt="image" style="max-width:100%;">
+<p>* 父节点是祖父节点的右子节点</p>
+<p>和父节点是祖父节点的左子节点一样，也根据叔叔节点的颜色分为两种情况</p>
+<p>    * 叔叔节点是红色</p>
+<p>    * 叔叔节点是黑色（空节点也是黑色）</p>
+<p>此时，如果当前节点是父节点的左子节点，需要先对父节点进行一次右旋，然后将父节点改成黑色，祖父节点改成红色，最后进行一次左旋，与上一种情况对应。</p>
+<h3>左旋和右旋</h3>
+<p>红黑树的左旋和右旋和普通二叉树的并无差别，也没有处理颜色，只是多了个parent指针，需要维护parent指针而已：</p>
+</code>`<code>Cpp
+<p>inline void </p>
+<p>_Rb_tree_rotate_left(_Rb_tree_node_base<em> __x, _Rb_tree_node_base</em>& __root)</p>
+<p>{</p>
+<p>  _Rb_tree_node_base* __y = __x->_M_right;  // 旋转节点的右子节点会被提升代替旋转节点</p>
+<p>  __x->_M_right = __y->_M_left;  // 右子节点的左子树要挂到旋转节点的右子树</p>
+<p>  if (__y->_M_left !=0) // 左子树不为空时，还需要维护parent指针</p>
+<p>    __y->_M_left->_M_parent = __x;</p>
+<p>  __y->_M_parent = __x->_M_parent;  // 如果x是root节点，此时y的parent也指向了dummy节点</p>
+<p>  // __y完全代替__x的地位（必须将x对其父节点的关系完全接收过来）</p>
+<p>  if (__x == __root)  // 如果旋转节点是root节点，那么旋转节点的右子节点就是新的root节点</p>
+<p>    __root = __y;</p>
+<p>  else if (__x == __x->_M_parent->_M_left)  // 如果旋转节点是root节点，那么旋转节点的右子节点就是新的root节点</p>
+<p>    __x->_M_parent->_M_left = __y;</p>
+<p>  else</p>
+<p>    __x->_M_parent->_M_right = __y;</p>
+<p>  __y->_M_left = __x;</p>
+<p>  __x->_M_parent = __y;</p>
+<p>}</p>
+<p>inline void </p>
+<p>_Rb_tree_rotate_right(_Rb_tree_node_base<em> __x, _Rb_tree_node_base</em>& __root)</p>
+<p>{</p>
+<p>  _Rb_tree_node_base* __y = __x->_M_left;</p>
+<p>  __x->_M_left = __y->_M_right;</p>
+<p>  if (__y->_M_right != 0)</p>
+<p>    __y->_M_right->_M_parent = __x;</p>
+<p>  __y->_M_parent = __x->_M_parent;</p>
+<p>  if (__x == __root)</p>
+<p>    __root = __y;</p>
+<p>  else if (__x == __x->_M_parent->_M_right)</p>
+<p>    __x->_M_parent->_M_right = __y;</p>
+<p>  else</p>
+<p>    __x->_M_parent->_M_left = __y;</p>
+<p>  __y->_M_right = __x;</p>
+<p>  __x->_M_parent = __y;</p>
+<p>}</p>
+</code>`<code>
+<h3>红黑树的查找</h3>
+<p>红黑树其实也是二叉搜索树，因此查找和二叉搜索树没区别：</p>
+</code>`<code>Cpp
+<p>emplate <class _Key, class _Value, class _KeyOfValue, </p>
+<p>          class _Compare, class _Alloc></p>
+<p>typename _Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>::iterator </p>
+<p>_Rb_tree<_Key,_Value,_KeyOfValue,_Compare,_Alloc>::find(const _Key& __k)</p>
+<p>{</p>
+<p>  _Link_type __y = _M_header;      // Last node which is not less than __k. </p>
+<p>  _Link_type __x = _M_root();      // Current node. </p>
+<p>  while (__x != 0) </p>
+<p>      // __x > __k 就想左，否则向右</p>
+<p>    if (!_M_key_compare(_S_key(__x), __k))</p>
+<p>      __y = __x, __x = _S_left(__x); </p>
+<p>    else</p>
+<p>      __x = _S_right(__x);</p>
+<p>  iterator __j = iterator(__y);   </p>
+<p>  return (__j == end() || _M_key_compare(__k, _S_key(__j._M_node))) ? </p>
+<p>     end() : __j;</p>
+<p>}</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #100</p>
+    </footer>
+</body>
+</html>

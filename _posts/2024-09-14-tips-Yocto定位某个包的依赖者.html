@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[tips] Yocto定位某个包的依赖者 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[tips] Yocto定位某个包的依赖者</h1>
+    <p class="date">2024-09-14</p>
+    <div class="labels"><span class="label">Yocto</span> </div>
+    <hr>
+    <div class="content">
+<p>在yocto编译中，有时候需要将rootfs中的某个包移除，但是因为有些包是因为被依赖才加入的，因此无法从bb文件中，或者是Image中移除，即通过添加到IMAGE_INSTALL_remove中无法移出，这时候需要找到是哪个包依赖这个包，才能判断是否能移出。</p>
+<p>可行的一个方法是：</p>
+<li>先生成编译清单：</li>
+<p>``<code>bash</p>
+<p>bitbake -g <rootfs 镜像> # 例如 bitbake -g xxx-image</p>
+</code>`<code>
+<p>这一步会生成四个文件：</p>
+<p>* pn-buildlist</p>
+<p>* package-depends.dot</p>
+<p>* task-depends.dot</p>
+<p>* pn-depends.dot</p>
+<li>从pn-depends.dot中查找</li>
+</code>`<code>bash
+<p>grep "pkg_name" pn-depends.dot #  例如 grep "python3" pn-depends.dot</p>
+</code>`<code>
+<p>输出样式为：</p>
+</code>`<code>
+<p>"python3" [label="python3 :3.5.2-r1.0\n/home/build/7100/sources/poky/meta/recipes-devtools/python/python3_3.5.2.bb"]</p>
+<p>"python3-pygobject" [label="python3-pygobject :3.20.1-r0\n/home/build/7100/sources/poky/meta/recipes-devtools/python/python3-pygobject_3.20.1.bb"]</p>
+<p>"python3-setuptools" [label="python3-setuptools :22.0.5-r0\n/home/build/7100/sources/poky/meta/recipes-devtools/python/python3-setuptools_22.0.5.bb"]</p>
+<p>"python3-native" [label="python3-native :3.5.2-r1.0\n/home/build/7100/sources/poky/meta/recipes-devtools/python/python3-native_3.5.2.bb"]</p>
+<p>"python3-dbus" [label="python3-dbus :1.2.4-r0\n/home/build/7100/sources/poky/meta/recipes-devtools/python/python3-dbus_1.2.4.bb"]</p>
+<p>"gstreamer1.0-plugins-bad" -> "python3-native" [style=solid]</p>
+<p>"gstreamer1.0-plugins-base" -> "python3-native" [style=solid]</p>
+<p>"gobject-introspection-native" -> "python3-native" [style=solid]</p>
+<p>"glib-2.0-native" -> "python3-native" [style=solid]</p>
+<p>"gdk-pixbuf" -> "python3-native" [style=solid]</p>
+<p>"librsvg" -> "python3-native" [style=solid]</p>
+<p>"python3" -> "bzip2" [style=solid]</p>
+<p>"python3" -> "libtool-native" [style=solid]</p>
+<p>"python3" -> "automake-native" [style=solid]</p>
+<p>"python3" -> "autoconf-native" [style=solid]</p>
+<p>"python3" -> "libtool-cross" [style=solid]</p>
+<p>"python3" -> "pkgconfig-native" [style=solid]</p>
+<p>"python3" -> "virtual/arm-poky-linux-gnueabi-compilerlibs" [style=solid]</p>
+<p>"python3" -> "gdbm" [style=solid]</p>
+<p>"python3" -> "readline" [style=solid]</p>
+<p>"python3" -> "sqlite3" [style=solid]</p>
+<p>"python3" -> "xz" [style=solid]</p>
+<p>"python3" -> "virtual/arm-poky-linux-gnueabi-gcc" [style=solid]</p>
+<p>"python3" -> "db" [style=solid]</p>
+<p>"python3" -> "zlib" [style=solid]</p>
+<p>"python3" -> "python3-native" [style=solid]</p>
+<p>"python3" -> "virtual/libintl" [style=solid]</p>
+<p>"python3" -> "virtual/libc" [style=solid]</p>
+<p>"python3" -> "openssl" [style=solid]</p>
+<p>"python3" -> "libffi" [style=solid]</p>
+<p>"python3" -> "gnu-config-native" [style=solid]</p>
+<p>"pango" -> "python3-native" [style=solid]</p>
+<p>"gstreamer1.0" -> "python3-native" [style=solid]</p>
+<p>"python3-pygobject" -> "libtool-native" [style=solid]</p>
+<p>"python3-pygobject" -> "automake-native" [style=solid]</p>
+<p>"python3-pygobject" -> "autoconf-native" [style=solid]</p>
+<p>"python3-pygobject" -> "libtool-cross" [style=solid]</p>
+<p>"python3-pygobject" -> "pkgconfig-native" [style=solid]</p>
+<p>"python3-pygobject" -> "virtual/arm-poky-linux-gnueabi-compilerlibs" [style=solid]</p>
+<p>"python3-pygobject" -> "gobject-introspection" [style=solid]</p>
+<p>"python3-pygobject" -> "glib-2.0" [style=solid]</p>
+<p>"python3-pygobject" -> "python3" [style=solid]</p>
+<p>"python3-pygobject" -> "gnome-common-native" [style=solid]</p>
+<p>"python3-pygobject" -> "virtual/arm-poky-linux-gnueabi-gcc" [style=solid]</p>
+<p>"python3-pygobject" -> "python3-native" [style=solid]</p>
+<p>"python3-pygobject" -> "virtual/libc" [style=solid]</p>
+<p>"python3-pygobject" -> "gobject-introspection-native" [style=solid]</p>
+<p>"python3-pygobject" -> "qemu-native" [style=solid]</p>
+<p>"python3-pygobject" -> "gnu-config-native" [style=solid]</p>
+<p>"libsoup-2.4" -> "python3-native" [style=solid]</p>
+<p>"gconf" -> "python3-native" [style=solid]</p>
+<p>"python3-setuptools" -> "virtual/libc" [style=solid]</p>
+<p>"python3-setuptools" -> "virtual/arm-poky-linux-gnueabi-compilerlibs" [style=solid]</p>
+<p>"python3-setuptools" -> "virtual/arm-poky-linux-gnueabi-gcc" [style=solid]</p>
+<p>"python3-setuptools" -> "python3-native" [style=solid]</p>
+<p>"python3-setuptools" -> "python3" [style=solid]</p>
+<p>"gstreamer1.0-plugins-good" -> "python3-native" [style=solid]</p>
+<p>"libuser" -> "python3" [style=solid]</p>
+<p>"libuser" -> "python3-native" [style=solid]</p>
+<p>"python3-native" -> "bzip2-replacement-native" [style=solid]</p>
+<p>"python3-native" -> "libtool-native" [style=solid]</p>
+<p>"python3-native" -> "automake-native" [style=solid]</p>
+<p>"python3-native" -> "autoconf-native" [style=solid]</p>
+<p>"python3-native" -> "zlib-native" [style=solid]</p>
+<p>"python3-native" -> "readline-native" [style=solid]</p>
+<p>"python3-native" -> "openssl-native" [style=solid]</p>
+<p>"python3-native" -> "sqlite3-native" [style=solid]</p>
+<p>"python3-native" -> "gnu-config-native" [style=solid]</p>
+<p>"gobject-introspection" -> "python3-native" [style=solid]</p>
+<p>"gobject-introspection" -> "python3" [style=solid]</p>
+<p>"glib-2.0" -> "python3-native" [style=solid]</p>
+<p>"libgudev" -> "python3-native" [style=solid]</p>
+<p>"gdk-pixbuf-native" -> "python3-native" [style=solid]</p>
+<p>"python3-dbus" -> "libtool-native" [style=solid]</p>
+<p>"python3-dbus" -> "automake-native" [style=solid]</p>
+<p>"python3-dbus" -> "autoconf-native" [style=solid]</p>
+<p>"python3-dbus" -> "libtool-cross" [style=solid]</p>
+<p>"python3-dbus" -> "pkgconfig-native" [style=solid]</p>
+<p>"python3-dbus" -> "virtual/arm-poky-linux-gnueabi-compilerlibs" [style=solid]</p>
+<p>"python3-dbus" -> "dbus" [style=solid]</p>
+<p>"python3-dbus" -> "python3" [style=solid]</p>
+<p>"python3-dbus" -> "expat" [style=solid]</p>
+<p>"python3-dbus" -> "virtual/arm-poky-linux-gnueabi-gcc" [style=solid]</p>
+<p>"python3-dbus" -> "python3-native" [style=solid]</p>
+<p>"python3-dbus" -> "virtual/libintl" [style=solid]</p>
+<p>"python3-dbus" -> "virtual/libc" [style=solid]</p>
+<p>"python3-dbus" -> "dbus-glib" [style=solid]</p>
+<p>"python3-dbus" -> "gnu-config-native" [style=solid]</p>
+<p>"gstreamer1.0-rtsp-server" -> "python3-native" [style=solid]</p>
+<p>"gstreamer1.0-plugins-bad-qt" -> "python3-native" [style=solid]</p>
+<p>"python3" -> "python3-lang" [style=dashed]</p>
+<p>"python3" -> "python3-gdbm" [style=dashed]</p>
+<p>"python3" -> "python3-subprocess" [style=dashed]</p>
+<p>"python3" -> "python3-sqlite3-tests" [style=dashed]</p>
+<p>"python3" -> "python3-audio" [style=dashed]</p>
+<p>"python3" -> "python3-idle" [style=dashed]</p>
+<p>"python3" -> "python3-threading" [style=dashed]</p>
+<p>"python3" -> "python3-shell" [style=dashed]</p>
+<p>"python3" -> "python3-pprint" [style=dashed]</p>
+<p>"python3" -> "python3-profile" [style=dashed]</p>
+<p>"python3" -> "python3-netserver" [style=dashed]</p>
+<p>"python3" -> "python3-logging" [style=dashed]</p>
+<p>"python3" -> "python3-io" [style=dashed]</p>
+<p>"python3" -> "python3-selectors" [style=dashed]</p>
+<p>"python3" -> "python3-textutils" [style=dashed]</p>
+<p>"python3" -> "python3-datetime" [style=dashed]</p>
+<p>"python3" -> "python3-unittest" [style=dashed]</p>
+<p>"python3" -> "python3-misc" [style=dashed]</p>
+<p>"python3" -> "python3-db" [style=dashed]</p>
+<p>"python3" -> "python3-compile" [style=dashed]</p>
+<p>"python3" -> "python3-xmlrpc" [style=dashed]</p>
+<p>"python3" -> "openssl" [style=dashed]</p>
+<p>"python3" -> "python3-debugger" [style=dashed]</p>
+<p>"python3" -> "python3-unixadmin" [style=dashed]</p>
+<p>"python3" -> "python3-reprlib" [style=dashed]</p>
+<p>"python3" -> "python3-difflib" [style=dashed]</p>
+<p>"python3" -> "python3-image" [style=dashed]</p>
+<p>"python3" -> "python3-tkinter" [style=dashed]</p>
+<p>"python3" -> "python3-crypt" [style=dashed]</p>
+<p>"python3" -> "python3-core" [style=dashed]</p>
+<p>"python3" -> "python3-fcntl" [style=dashed]</p>
+<p>"python3" -> "python3-math" [style=dashed]</p>
+<p>"python3" -> "python3-re" [style=dashed]</p>
+<p>"python3" -> "python3-argparse" [style=dashed]</p>
+<p>"python3" -> "python3-readline" [style=dashed]</p>
+<p>"python3" -> "python3-syslog" [style=dashed]</p>
+<p>"python3" -> "python3-tests" [style=dashed]</p>
+<p>"python3" -> "python3-smtpd" [style=dashed]</p>
+<p>"python3" -> "python3-xml" [style=dashed]</p>
+<p>"python3" -> "python3-importlib" [style=dashed]</p>
+<p>"python3" -> "python3-terminal" [style=dashed]</p>
+<p>"python3" -> "python3-numbers" [style=dashed]</p>
+<p>"python3" -> "python3-sqlite3" [style=dashed]</p>
+<p>"python3" -> "python3-compression" [style=dashed]</p>
+<p>"python3" -> "python3-pydoc" [style=dashed]</p>
+<p>"python3" -> "python3-enum" [style=dashed]</p>
+<p>"python3" -> "python3-multiprocessing" [style=dashed]</p>
+<p>"python3" -> "python3-distutils" [style=dashed]</p>
+<p>"python3" -> "python3-mailbox" [style=dashed]</p>
+<p>"python3" -> "python3-pickle" [style=dashed]</p>
+<p>"python3" -> "python3-netclient" [style=dashed]</p>
+<p>"python3" -> "python3-curses" [style=dashed]</p>
+<p>"python3" -> "python3-pkgutil" [style=dashed]</p>
+<p>"python3" -> "python3-stringold" [style=dashed]</p>
+<p>"python3" -> "python3-doctest" [style=dashed]</p>
+<p>"python3" -> "python3-json" [style=dashed]</p>
+<p>"python3" -> "python3-2to3" [style=dashed]</p>
+<p>"python3" -> "python3-mime" [style=dashed]</p>
+<p>"python3" -> "python3-signal" [style=dashed]</p>
+<p>"python3" -> "python3-codecs" [style=dashed]</p>
+<p>"python3" -> "python3-email" [style=dashed]</p>
+<p>"python3" -> "python3-html" [style=dashed]</p>
+<p>"python3" -> "python3-resource" [style=dashed]</p>
+<p>"python3" -> "python3-ctypes" [style=dashed]</p>
+<p>"python3" -> "python3-asyncio" [style=dashed]</p>
+<p>"python3" -> "python3-mmap" [style=dashed]</p>
+<p>"python3-pygobject" -> "python3-setuptools" [style=dashed]</p>
+<p>"python3-pygobject" -> "python3-core" [style=dashed]</p>
+<p>"python3-pygobject" -> "python3-pygobject-dev" [style=dashed]</p>
+<p>"python3-pygobject" -> "python3-pygobject" [style=dashed]</p>
+<p>"python3-pygobject" -> "python3-importlib" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-misc" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-email" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-importlib" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-setuptools" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-numbers" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-compression" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-subprocess" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-textutils" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-ctypes" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-unittest" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-distutils" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-pkgutil" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-setuptools-dev" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-threading" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-shell" [style=dashed]</p>
+<p>"python3-setuptools" -> "python3-xml" [style=dashed]</p>
+<p>"bluez5" -> "python3-pygobject" [style=dashed]</p>
+<p>"bluez5" -> "python3-dbus" [style=dashed]</p>
+<p>"bluez5" -> "python3" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-dbus" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-dbus-dev" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-threading" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-stringold" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-logging" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-io" [style=dashed]</p>
+<p>"python3-dbus" -> "python3-xml" [style=dashed]</p>
+</code>`<code>
+<p>这里，因为</code>gstreamer1.0-plugins-base`依赖了python3，但是gstreamer在项目中用了，因此无法移出。</p>
+<h2>输出文件的作用：</h2>
+<li>pn-buildlist：这个文件列出了构建过程中所涉及到的所有包（PN，Package Name）的列表。它是一个纯文本文件，其中每一行都是一个要构建的包的名称。这个文件可以用来查看构建系统中需要构建的包。</li>
+<li>package-depends.dot：这是一个以 Graphviz 的 .dot 格式生成的文件，用来描述包（Package）之间的依赖关系。通过这个文件，可以直观地查看每个包依赖于哪些其他包。你可以通过 Graphviz 等工具将其可视化为一个依赖关系图，方便理解整个系统的包依赖结构。</li>
+<li>task-depends.dot：这个文件以 .dot 格式描述了任务（Task）之间的依赖关系。Yocto 中的每个包构建过程被分成多个任务（如 do_fetch，do_compile，do_install等），这个文件展示了这些任务之间的相互依赖。它对理解整个构建过程中的任务执行顺序有帮助，也可以用 Graphviz 工具进行可视化。</li>
+<li>pn-depends.dot：这个文件也是 .dot 格式的，它展示了包（Package Name，PN）之间的依赖关系，但与 package-depends.dot不同的是，它仅限于包的名称，而不包括包内的具体版本。它帮助你理解哪些包在构建过程中有相互依赖关系，同样可以用 Graphviz 工具生成依赖图。</li>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #71</p>
+    </footer>
+</body>
+</html>

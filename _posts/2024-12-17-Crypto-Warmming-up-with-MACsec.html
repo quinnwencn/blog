@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto] Warmming up with MACsec - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto] Warmming up with MACsec</h1>
+    <p class="date">2024-12-17</p>
+    <div class="labels"><span class="label">Crypto</span> <span class="label">MACsec</span> </div>
+    <hr>
+    <div class="content">
+<h1>Overview</h1>
+<p>MACsec(Media Access Control Security) is a layer 2 protocol, standardized in 2006 by IEEE (standard IEEE 802.1AE-2006),  that relies on AES-128-GCM to protect integrity and confidentiality over Ethernet. As such, MACsec can protect not only IP data but also ARP and other protocols based on layer 2 (according to the OSI layer model).</p>
+<p>A companion protocol, IEEE 8.2.1X-2010(MACsec Key Agreement, MKA) is standized in 2010 to provide key exchange and allow mutual authentication of nodes involving MACsec connectivity association. MACsec can be used in combination with other security protocols like IPSec (Internet Protocol Security), TLS (Transport Layer Security), to provide end-to-end network security.</p>
+<img src="https://github.com/user-attachments/assets/32417c28-6938-4207-834b-b21443380b78" alt="image" style="max-width:100%;">
+<h1>How it works</h1>
+<p>MACsec uses a combination of data integrity checks and encryption to secure traffic traversing the link:</p>
+<p><em> </em>Data integrity*: MACsec appends an (8-16)-byte header (SecTAG) and a 16-byte tail (ICV, Integrity Check Value) to all Ethernet frames traversing the MACsec-secured link. The header and tail are checked by the receiving interface to ensure that the data was not compromised while traversing the link. If the data integrity check detects anything irregular about the traffic, the traffic is dropped.</p>
+<p><em> </em>Encryption*: Encryption ensures that the data in the Ethernet frame cannot be viewed by anybody monitoring traffic on the link. MACsec encryption is optional and user-configurable. You can enable MACsec to ensure the data integrity checks are performed while still sending unencrypted data “in the clear” over the MACsec-secured link, if desired. </p>
+<p>> Note: When MACsec is enabled on a logical interface, VLAN tags are not encrypted. All the VLAN tags configured on the logical interface enabled for MACsec are sent in clear text.</p>
+<img src="https://github.com/user-attachments/assets/a3559dfa-da50-4f42-830b-527b29089008" alt="image" style="max-width:100%;">
+<p>or </p>
+<img src="https://github.com/user-attachments/assets/17c7ce0a-80f4-47c5-8149-10984db11bfd" alt="image" style="max-width:100%;">
+<p>or</p>
+<img src="https://github.com/user-attachments/assets/7becca79-794e-4659-8e0a-862e2a42cde2" alt="image" style="max-width:100%;">
+<p>When considering a point-to-point communication scenario, the link is secured after matching secure keys are exchanged and verified between the two communication nodes at the peer end of the link. The key can be configured manually or generated dynamically. </p>
+<img src="https://github.com/user-attachments/assets/356d7caa-3b37-4c7f-9e16-0bbacd1e7ea5" alt="image" style="max-width:100%;">
+<p>MACsec is configured in connectivity associations. In the above scenario, both nodes are considered as a connectivity association. A connectivity association as a set of MACsec attributes that interfaces use to create two channels, one for inbound traffic and the other for outbound traffic. The secure channels are responsible for transmitting and receiving data on the MACsec secure link. Secure channels are created automatically without any user-configurable data, and they must be assigned to a MACsec-capable interface on each side of the point2point Ethernet link.  But as we know, communication with multiple nodes is common in network communication, MACsec also supports multiple Ethernet links, but in this case, we must configure MACsec individually on each link.</p>
+<h2>MACsec Security Modes</h2>
+<p>MACsec can be configured into one of the following modes:</p>
+<p>* Static CAK(Connectivity Association Key) mode</p>
+<p>* Dynamic CAK mode</p>
+<h3>Static CAK mode</h3>
+<p>Wen Static CAK mode is enabled, two security keys are used to secure the link:</p>
+<p>* CAK: Connectivity Association Key, which is used to secure the control plane traffic.</p>
+<p>* SAK: Secure Association Key, generated dynamically, which is used to secure the data plane traffic.</p>
+<p>Both keys are exchanged regularly between both nodes on the peer of the link. We must provide a pre-shared key in static CAK mode, which includes a connectivity association key name(CKN) and its own CAK. The CKN and CAK are configured by the user and must match the peer node's CKN and CAK.</p>
+<p>Once matching pre-shared keys are successfully exchanged, the MACsec Key Agreement(MKA) protocol is enabled, which will be responsible for maintaining MACsec on the link. MKA also decides which switch on the link becomes the key server of the link. The key server will generate an SAK and share it with the switch at the peer node. The SAK will be generated randomly and periodically during the MACsec connection.</p>
+<h3>Dynamic CAK mode</h3>
+<p>Unlike static CAK mode, CAK and SAK keys are generated automatically and randomly in dynamic CAK mode. There must be a RADIUS server when dynamic CAK mode is enabled.. The peer nodes of the MACsec link receive key attributes from the RADIUS server during authentication and use these attributes to generate the CAK and SAK. Then they exchange the keys to create a MACsec-secured connection like static CAK mode. During authentication of dynamic CAK mode, certificates must be used to validate authentication, using Extensible Authentication Protocol-Transport Layer Security (EAP-TLS).</p>
+<h2>Integrity Protection</h2>
+<p>In the above picture, there is an ICV in every frame. The ICV is calculated using the cryptographic digest function with the data and the SAK. This makes it impossible to tamper with the data without knowing the key. To prevent the link from dropping, replaying, and delaying the attack, the receiver can use the packet number (PN) to check. PN is 32 bits long and unique to the specific SA(Secure Association) and SAK. MACsec transmits each frame in an SA with a PN that increases with each frame transmitted.</p>
+<h2>Communication flow</h2>
+<img src="https://github.com/user-attachments/assets/14336ef4-468f-4e31-8572-475c5b81484e" alt="image" style="max-width:100%;">
+<p>As illustrated above, the communication flow of MACsec entities consists of three phases:</p>
+<li>Authentication of participants</li>
+<li>Session negotiation</li>
+<li>Secure communication</li>
+<h3>Authentication of participants</h3>
+<p>Before two entities start MACsec communication, CAK must be provisioned, either by static provisioning(pre-shared) or dynamic generation. During the first phase of the MACsec Key Agreement(MKA) sequence, the MKA entity identifies other participants belonging to its configured CA.</p>
+<p>The participants of the MKA communication will identify and authenticate each other based on the CKN and ICV of the MKPDUs exchanged. Once a participant can successfully identify and authenticate another participant belonging to the same CA, the member identifier of the other participant is included in its transmitted “Potential Peer List”. If a participant recognizes another one and it is listed in the other “Potential peer List”, it will mark it as a Live participant. The Member Identifier of the other participant will be included in the transmitted “Live Peer List”.</p>
+<h3>Session negotiation</h3>
+<p>In AUTOSAR's <a href="https://www.autosar.org/fileadmin/standards/R22-11/FO/AUTOSAR_RS_MACsec.pdf">Requirements on MACsec</a>， dynamic election of the Key Server member is not supported, so we will assume that each participant will currently configure its role in the communication in advance.</p>
+<p>The participants can share the supported cipher suites by means of the “MACsec Cipher Suites Announcement”. The participant with the Key Server role will select a cipher suite and generate and distribute a Secure Association Key accordingly.</p>
+<p>Both participants shall communicate the readiness to transmit and receive MACsec protected PDUs with the “MACsec SAK Use” parameter set.</p>
+<p>During the Secure Channel life time, it is possible to distribute new SAKs (and therefore create a new SA) without a communication interruption. The participants can also detect if the communication partner is alive. In case a cipher suite with Extended Packet Number (XPN) is selected, additional parameter sets are exchanged during the Secure Channel life time to keep the channel information up-to-date.</p>
+<p>Roles in MACsec:</p>
+<p>* Participant: The personification of a single KaY’s participation in a given MKA instance. It transmits and receives MKPDUs protected by keys derived from a single given CAK and identified by a Connectivity Association Key Name (CKN).</p>
+<p>* Key Server: Authenticated participant which generates and distributes the Secure Association Key to use in a Secure Channel. This participant decides the cipher suites to use.</p>
+<p>* Peer: Authenticated participant which does not possess the Key Server role.</p>
+<p>A key server is selected between the routers, based on the configured key server priority. Lower the priority value, higher the preference for the router to become the key server. If no value is configured for a router, a default value of 16 will be assigned, making it less likely to be selected as a key server.</p>
+<h3>Secure communication</h3>
+<p>Secure communication can start based on the parameters exchanged in the previous phases after the identification, mutual authentication, distribution of keys, and installation of keys.</p>
+<h2>Keys used in MACsec</h2>
+<p>* Secure Connectivity Association Key (CAK): Secret key possessed by members of a given CA. The CAK is identified by its respective secure Connectivity Association Key Name (CKN).</p>
+<p>* Integrity Check Value Key (ICK): Key derived from the respective CAK and used to transmit/validate Integrity-protected MKPDUs.</p>
+<p>* Key Encrypting Key (KEK): Key derived from the respective CAK and used to encrypt/decrypt a Secure Association Key (SAK).</p>
+<p>* Secure Association Key (SAK): Key used by the MACsec Entity (SecY) to integrity protect/validate and/or encrypt/decrypt MPDUs belonging to a specific Secure Association. The SAK is generated by one MKA participant (Key Server) and distributed during the MKA sequence.</p>
+<h1>MACsec on Linux</h1>
+<h2>Enable MACsec in kernel</h2>
+<img src="https://github.com/user-attachments/assets/0d110404-dfe5-4f53-b964-4806f05052f2" alt="image" style="max-width:100%;">
+<p>Enable it via menuconfig and rebuild the kernel, boot the system to check if MACsec is enabled as follow:</p>
+<img src="https://github.com/user-attachments/assets/a44c7d94-295c-4262-a392-7f2e665e43ea" alt="image" style="max-width:100%;">
+<h2>Install dependencies</h2>
+<p>``<code>bash</p>
+<p>git clone git://git.kernel.org/pub/scm/linux/kernel/git/shemminger/iproute2.git</p>
+<p>cd iproute2/</p>
+<p>./configure</p>
+<p>make</p>
+<p>make install</p>
+<p>modprobe macsec</p>
+</code>`<code>
+<h2>Configure two PC to support MACsec following below steps:</h2>
+<p>* Create MACsec device on the physical link over the which traffic will be received and sent</p>
+<p>* Configure a secure association on the MACsec device</p>
+<p>* Configure a receive channel(Use the peer MAC address as parameter)</p>
+<p>* Configure a receive association(Use the peer MAC address as parameter)</p>
+<p> First we need to know the MAC addresses of the two hosts between which MACsec will be configured. </p>
+<p>PC1:</p>
+</code>`<code>bash
+<p>$ ifconfig enp3s0</p>
+<p>enp3s0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500</p>
+<p>        inet 10.10.65.132  netmask 255.255.255.0  broadcast 10.10.65.255</p>
+<p>        inet6 fe80::2a1e:eaf0:5399:36c3  prefixlen 64  scopeid 0x20<link></p>
+<p>        ether 6c:02:e0:3f:48:73  txqueuelen 1000  (Ethernet)</p>
+<p>        RX packets 12337823  bytes 4952665014 (4.9 GB)</p>
+<p>        RX errors 0  dropped 99836  overruns 0  frame 0</p>
+<p>        TX packets 10911342  bytes 1488844020 (1.4 GB)</p>
+<p>        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0</p>
+</code>`<code>
+<p>PC2:</p>
+</code>`<code>bash
+<p>$ ifconfig enp10s0</p>
+<p>enp10s0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500</p>
+<p>        inet 10.10.65.160  netmask 255.255.255.0  broadcast 10.10.65.255</p>
+<p>        inet6 fe80::4e0e:9135:fe5a:3146  prefixlen 64  scopeid 0x20<link></p>
+<p>        ether fc:34:97:3e:39:db  txqueuelen 1000  (Ethernet)</p>
+<p>        RX packets 51250647  bytes 20803829324 (20.8 GB)</p>
+<p>        RX errors 0  dropped 2993  overruns 0  frame 0</p>
+<p>        TX packets 43970549  bytes 8792735611 (8.7 GB)</p>
+<p>        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0</p>
+</code>`<code>
+<li>Create MACsec device on enp3s0 interface (with root or sudo permission)</li>
+</code>`<code>bash
+<p>ip link add link enp3s0 macsec0 type macsec</p>
+</code>`<code>
+<li>Configure the transmit secure association, the packet number used as the start ID for the packets sent through this SA and the key</li>
+</code>`<code>bash
+<p>ip macsec add macsec0 tx sa 0 on 1 on key 01 12345678901234567890123456789012</p>
+</code>`<code>
+<li>Configure the receive channel and receive association based on the peer MAC address, the port number, the first packet expected and the key</li>
+</code>`<code>bash
+<p>ip macsec add macsec0 rx address fc:34:97:3e:39:db port 1</p>
+<p>ip macsec add macsec0 rx address fc:34:97:3e:39:db port 1 sa 0 on 1 on key 02 09876543210987654321098765432109</p>
+</code>`<code>
+<li>Bring up the interface and configure an IP address on it</li>
+</code>`<code>bash
+<p>ip link set dev macsec0 up</p>
+<p>ifconfig macsec0 10.10.12.1/24</p>
+</code>`<code>
+<p>Redo this on another PC, or use the scripts bellow:</p>
+<p>* Script1:</p>
+</code>`<code>bash
+<p>#!/bin/bash</p>
+<p>set -e</p>
+<p>if [ $# -ne 2 ]; then</p>
+<p>	echo "./macsec.sh dev mac_address_of_peer"</p>
+<p>	exit 1</p>
+<p>fi</p>
+<p>dev=$1</p>
+<p>addr=$2</p>
+<p>ip link add link $dev macsec0 type macsec</p>
+<p>ip macsec add macsec0 tx sa 0 pn 1 on key 01 12345678901234567890123456789012</p>
+<p>ip macsec add macsec0 rx address $addr port 1</p>
+<p>ip macsec add macsec0 rx address $addr port 1 sa 0 pn 1 on key 02 09876543210987654321098765432109</p>
+<p>ip link set dev macsec0 up</p>
+<p>ifconfig macsec0 10.10.12.1/24</p>
+</code>`<code>
+<p>* Script2</p>
+</code>`<code>bash
+<p>#!/bin/bash</p>
+<p>set -e</p>
+<p>if [ $# -ne 2 ]; then</p>
+<p>	echo "./macsec.sh dev mac_address_of_peer"</p>
+<p>	exit 1</p>
+<p>fi</p>
+<p>dev=$1</p>
+<p>addr=$2</p>
+<p>ip link add link $dev macsec0 type macsec</p>
+<p>ip macsec add macsec0 tx sa 0 pn 1 on key 02 09876543210987654321098765432109 </p>
+<p>ip macsec add macsec0 rx address $addr port 1</p>
+<p>ip macsec add macsec0 rx address $addr port 1 sa 0 pn 1 on key 01 12345678901234567890123456789012</p>
+<p>ip link set dev macsec0 up</p>
+<p>ifconfig macsec0 10.10.12.2/24</p>
+</code>``
+<p>Then ping and verify it:</p>
+<img src="https://github.com/user-attachments/assets/b6139af4-87de-44b3-b5db-1e33a183df99" alt="image" style="max-width:100%;">
+<p>> [!NOTE]  </p>
+<p>> Hardware support for MACsec is available. MACsec-aware hardware, such as PHYs or specific controllers and routers, can enhance the speed of encryption and AES-GCM calculations, resulting in improved performance.</p>
+<h1>Reference</h1>
+<p>https://nextheader.net/2016/10/14/macsec-on-linux/</p>
+<p>https://developers.redhat.com/blog/2016/10/14/macsec-a-different-solution-to-encrypt-network-traffic#configuration_example</p>
+<p>https://www.comcores.com/what-is-macsec/</p>
+<p>More detail of AUTOSAR explanation of MACsec and MKA protocols implementation can refer to https://www.autosar.org/fileadmin/standards/R23-11/AP/AUTOSAR_AP_EXP_MACsec.pdf</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #85</p>
+    </footer>
+</body>
+</html>

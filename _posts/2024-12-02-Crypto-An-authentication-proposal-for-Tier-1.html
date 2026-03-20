@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto] An authentication proposal for Tier 1 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto] An authentication proposal for Tier 1</h1>
+    <p class="date">2024-12-02</p>
+    <div class="labels"><span class="label">Crypto</span> </div>
+    <hr>
+    <div class="content">
+<p>In vendor management, an OEM (Original Equipment Manufacturer) may require their vendors to provide a secure authentication method for the ECUs (Electronic Control Units) they supply, particularly in the context of self-driving vehicles. Components like lidar sensors and cameras must be protected from malware and tampering, and they should have mechanisms in place to prove that they have not been compromised.</p>
+<p>One effective way to achieve this is by implementing cryptographic protection. Vendors can request the OEM to sign an Immediate CA (Certification Authority) certificate for themselves. Using this Immediate CA, vendors can then issue certificates for each ECU they manufacture for the OEM. If multiple OEMs are using the same ECU, the vendor can issue certificates signed by different Immediate CAs, each associated with the respective OEM.</p>
+<p>With the certificates issued by the Immediate CA, the ECUs can perform asymmetric authentication with the vehicle.</p>
+<img src="https://github.com/user-attachments/assets/3672cd9e-d9f2-4969-bc75-ce8594a11c65" alt="image" style="max-width:100%;">
+<p>Since both the vendor-supplied ECUs and those manufactured by the OEM are signed by the same root CA, they can verify each other during boot-up or at any other time. For added security, the ECUs can derive symmetric keys to enable secure communication.</p>
+<p>> Note: For ECUs that do not support asymmetric cryptography algorithms, vendors should provide a method for the OEM to provision symmetric keys during the vehicle's manufacturing process.</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #80</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Linux] Using systemd to manage tasks - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Linux] Using systemd to manage tasks</h1>
+    <p class="date">2025-11-04</p>
+    <div class="labels"><span class="label">Linux</span> </div>
+    <hr>
+    <div class="content">
+<p> <code>systemd</code> is the initialization system for Linux, which is responsible for:</p>
+<p>* Starting the system and managing all background services(daemon)</p>
+<p>* Controlling the startup order and dependencies of services</p>
+<p>* Providing a unified command-line tool <code>systemctl</code></p>
+<p>* Managing logs, resources limited, automatic restarts, and more</p>
+<p>Almost all modern Linux distributions, including embedded systems, use systemd.</p>
+<h1>Learning by example</h1>
+<p>We have two services, A and B. A is a service that initializes the system and then exits. B will persist in the system, but it depends on service A. And A depends on the network service.</p>
+<p>Here is how service A is configured: a.service</p>
+<p>``<code></p>
+<p>[Unit]</p>
+<p>Description=Prepare XXX Enviroment</p>
+<p>After=network.target</p>
+<p>[Service]</p>
+<p>Type=oneshot</p>
+<p>ExecStart=/usr/bin/A</p>
+<p>RemainAfterExit=yes</p>
+<p>TimeoutStartSec=60s</p>
+<p>User=root</p>
+<p>[Install]</p>
+<p>WantedBy=multi-user.target</p>
+</code>`<code>
+<p>And B: b.service</p>
+</code>`<code>
+<p>[Unit]</p>
+<p>Description=B system</p>
+<p>After=a.service</p>
+<p>[Service]</p>
+<p>Type=simple</p>
+<p>Environment="LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH"</p>
+<p>ExecStart=/usr/local/bin/fota -c /userdata/b/us.toml</p>
+<p>Restart=on-failure</p>
+<p>RestartSec=3</p>
+<p>User=root</p>
+<p>WorkingDirectory=/userdata/b</p>
+<p>StandardOutput=journal</p>
+<p>StandardError=journal</p>
+<p>TimeoutStopSec=3s</p>
+<p>[Install]</p>
+<p>WantedBy=multi-user.target</p>
+</code>`<code>
+<p>Above is the systemd service file. A systemd service file describes how a process (or job) should start, stop, restart, and behave under Linux’s systemd init system.</p>
+<p>Service files are usually located in:</p>
+</code>`<code>
+<p>/etc/systemd/system/        # User or custom services (preferred for local changes)</p>
+<p>/usr/lib/systemd/system/    # Distribution-provided services</p>
+<p>/lib/systemd/system/        # Sometimes used by distros (like Debian-based)</p>
+</code>`<code>
+<h2> Structure of a service file</h2>
+<p>A typical </code>.service` file has three main sections:</p>
+<p>* [Unit]: Defines metadata and dependencies -- When and in what order the service should start.</p>
+<p>* [Service]: Defines how the service runs -- What command to execute, how to supervise it, restart policies, etc.</p>
+<p>* [Install]: Defines how the service is enabled or linked to a target</p>
+<h2>Keywords in each section</h2>
+<h3>Unit</h3>
+<p>* Description: Short human-readable description of the service</p>
+<p>* After: Start after the listed units have started</p>
+<p>* Before: Start before the listed units</p>
+<p>* Requires: Hard dependency: these units must start for this one to start</p>
+<p>* Wants: Soft dependency: try to start these, but not required</p>
+<p>* Conflicts: Defines mutual exclusivity with other units</p>
+<p>* ConditionPathExists: Run this unit only if a path exists</p>
+<p>* Documentation: Optional reference to documentation or man pages</p>
+<h3>Service</h3>
+<p>* Type: Defines how systemd interprets service into startup, common types:</p>
+<p>   * simple: Default, the process runs in the foreground</p>
+<p>   * forking: Daemonizes itself(forks into background)</p>
+<p>   * oneshot: Runs a short-lived job (script) and exits.</p>
+<p>   * notify: Application notifies systemd when ready</p>
+<p>   * idle: Runs when system is idle</p>
+<p>* ExecStart: The command (and argument) to execute when starting.</p>
+<p>* ExecStop: Command to run when stopping the service</p>
+<p>* ExecReload: Command to reload configuration</p>
+<p>* User/Group: User and group under which to run the service</p>
+<p>* WorkingDirectory: Set current working directory</p>
+<p>* Environment: Define environment variables</p>
+<p>* EnvironmentFile: Load env vars form a file</p>
+<p>* Restart: Define restart policy</p>
+<p>* RestartSec: Delay before restarting (in seconds)</p>
+<p>* TimeoutStartSec: How long to wait for start before failing</p>
+<p>* RemainAfterExit: For oneshot units -- remain "active" after script exits.</p>
+<p>* StandardOutput/StandardError: Control where logs go (journal, syslog, file, etc)</p>
+<p>* TimeoutStopSec: Defines how long systemd will wait for the service to stop gracefully after it receives a stop signal(usually SIGTERM), before forcibly killing the process with SIGKILL.</p>
+<h3>Install</h3>
+<p>* wantedBy: Links this service to a target (e.g. multi-user.target)</p>
+<p>* RequiredBy: Stronger version of WantedBy</p>
+<p>* Also: Enable or disable additional units together with this one</p>
+<p>* Alias: Additional names for the same service</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #124</p>
+    </footer>
+</body>
+</html>

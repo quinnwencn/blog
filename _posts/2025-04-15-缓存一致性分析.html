@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>缓存一致性分析 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>缓存一致性分析</h1>
+    <p class="date">2025-04-15</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">Computer Architecture</span> </div>
+    <hr>
+    <div class="content">
+<h1>为什么会有缓存一致性(Cache Consistency)问题</h1>
+<h2>缓存的发展</h2>
+<p>要回答这个问题，首先得从缓存的发展说起。著名的摩尔定律大家都听过：<strong>集成电路上可容纳的晶体管数目，每隔约两年便会增加一倍</strong>。但是，随着时间的发展，增加的不仅仅是集成电路上的晶体管数目，CPU的处理速度也在飞速增长，这体现在CPU的频率上。在Intel早期的产品上，CPU是没有缓存的，比如4004、8008以及80286，因此这个时候CPU的频率和内存的存储频率都很低，几乎是同频的，内存的频率没有成为CPU运算的瓶颈。比如说，8088的CPU系统主频已经到了4.77MHz，一个总线周期大概是4拍，也就是840ns；而同时期的内存的存储周期是200ns左右，也就是说，内存还需要等待CPU处理，因此这个时候的发展瓶颈主要在于CPU。</p>
+<p>但是，随着时间的发展，CPU的频率逐步提高，内存的频率的提升却没有CPU那么快，因此内存的存储频率就成了制约CPU处理速度的关键瓶颈。从1980年之后，CPU的处理速度就开始超越DRAM（内存）的处理速度，因此内存的存储速度成为了计算机处理能力的瓶颈：</p>
+<img src="https://github.com/user-attachments/assets/8cba96d3-4397-4b01-9796-bdb463e89de8" alt="Image" style="max-width:100%;">
+<p>为了解决这个问题，缓存被发明了，用来在处理器和内存之间作为一个中间存储介质。缓存一般使用的是容量更小但是非常安规的SRAM(Static Random-Access Memory)，价格比内存贵，但是处理速度比内存高。现在的计算机基本都具备三层缓存，离CPU最近的是L1 Cache，速度最快，容量也最小，其次是L2 Cache；L1 Cache和L2Cache在CPU的每个核心上都有，也就是核心独享的，L3 Cache是CPU上所有核心共享的。在缓存之上，就是CPU的寄存器，寄存器的速度比L1 Cache快：</p>
+<img src="https://github.com/user-attachments/assets/1777f9bd-69e8-4462-8fff-f4717b2468b1" alt="Image" style="max-width:100%;">
+<p>有一张图，描述了CPU上缓存以及内存之间的物理关系：</p>
+<img src="https://github.com/user-attachments/assets/23b94098-b6fd-466d-8529-b7f9ff103252" alt="Image" style="max-width:100%;">
+<p>图中，每个CPU有两个核心，其中每个核心都一个L1缓存和一个L2缓存，其中L1缓存离核心最近；多个CPU核心共享一个L3缓存。在一些具有显卡的CPU上，显卡和CPU核心共享L3缓存。</p>
+<img src="https://github.com/user-attachments/assets/45ec82b1-1e44-4860-9d71-9b5c53587a11" alt="Image" style="max-width:100%;">
+<p>可以看到，离CPU越近的缓存，其速度也就越快，<a href="https://zhuanlan.zhihu.com/p/647871317">别人</a>总结了CPU访问这几个缓存的所需要的时间以及缓存的特性，这里引用下：</p>
+<p>| Cache | CPU Access Time | Comment | Cache Size |</p>
+<p>|---|---|---|---|</p>
+<p>| L1 Cache | 2~4 Clock Circles | 每个CPU核心都有一块自己的L1 Cache，通常分为指令Cache和数据Cache | 256KB~1MB |</p>
+<p>| L2 Cache | 10~20 Clock Circles | 每个CPU核心也都有一块L2 Cache | 2~8MB |</p>
+<p>| L3 Cache | 20 ~60 Clock Circles | 多个CPU核心共享一个L3 Cache | 10~64MB |</p>
+<p>L1缓存会被区分为缓存指令的i-cache(read only)和缓存数据的d-cache，这是为了加速CPU的指令和数据存储，而L2和L3缓存不区分指令和数据，统一称为统一缓存（Unified cache）。</p>
+<h1>缓存操作</h1>
+<h2>缓存条目</h2>
+<p>数据从内存被拷贝进cache时，是以固定的大小来进行拷贝的，这个固定大小被称为cache line或者是cache block，即缓存行或者缓存块，以下统称为缓存行。当一个缓存行数据被拷贝进缓存时，一条缓存条目就被创建了，缓存条目不仅包括了数据，同时还包含了请求的内存位置（被称为标签），同时还会包含一个状态位（MESI）。缓存行的结构大致如下图所示：</p>
+<img src="https://github.com/user-attachments/assets/7a01a1fb-8294-40fa-8c9b-8e0d353822f0" alt="Image" style="max-width:100%;">
+<p>其中状态位表示该缓存行是否失效， 组标记用来表示该缓存行映射的是内存上的那一块数据；数据就是映射的内存数据。CPU在读取或者写入内存时，首先会检查该内存对应的条目是否已经加载到了缓存行，如果已经加载了并且是有效的，那么就会产生一个缓存命中事件，CPU可以直接使用；但是，缓存行可能没被加载或者已经失效，此时就会有缓存不命中行为。缓存不命中的话，缓存会分配一个新的缓存条目，并将内存数据拷贝到分配的缓存条目。缓存行替换有很多策略，使用最多的就是LRU（lease renctly used)。</p>
+<h2>缓存映射</h2>
+<p>将内存数据加载到缓存行有很多方法，不同的方法决定了数据被加载到缓存的位置，常见的映射方式主要有三种：</p>
+<p>* 直接映射(Direct Mapping)</p>
+<p>* 全相联映射(Fully Associate Mapping)</p>
+<p>* 组相联映射(Set-Associate Mapping)</p>
+<h3>直接映射</h3>
+<p>直接映射是一种简单常见的映射方式，这种映射方式下，每一块内存数据分别被映射到相同的缓存行，比如内存有8块，缓存行有四行，那么block0~3分别映射到缓存行0~3，而内存块4~7也被映射到缓存行0~3，伪代码表示为：</p>
+<p>``<code>C</p>
+<p>i = j modulo m = j % m</p>
+<p>where</p>
+<p>i = cache line number</p>
+<p>j = main memory block number</p>
+<p>m = number of cache lines in the cache</p>
+</code>`<code>
+<p>在直接映射方式里，主内存的内存地址由组号，组内序号和块内偏移量三部分构成，内存块按照组内序号取模映射到缓存行中，同一组的内存块不会映射到同一个缓存行，不同组的内存块则可能会映射到同一个缓存行，比如上述例子的内存块0和内存块4；实际上上述内存被分为两组：0~3块划分为1组，4~7块划分为一组。</p>
+<h3>全相联映射</h3>
+<p>由于直接映射方式中每个内存块被严格限制到只能映射到某一行缓存行，这导致缓存命中率不高，为了提高缓存命中率，全相联映射被提出。全相联映射方式是一种任意内存块都可以被映射到任意一行缓存行的映射方式，这为内存加载到缓存中提供了比较高的自由度，但是因此也需要更复杂的系统来搜索和管理缓存行。</p>
+<p>缓存的地址结构在全相联映射方式中也和直接映射不一样，在全相联映射中，缓存不会存储组序号，它只有一个tag用来表征序号域，这和内存中的一样。</p>
+<img src="https://github.com/user-attachments/assets/99878302-ca0b-4630-9056-893dc801c7d7" alt="Image" style="max-width:100%;">
+<p>此时，tag就用来判断一个内存块是否在缓存中，缓存会将要访问的内存地址获取序号，然后和缓存行中的序号对比，如果找到一个匹配的序号，就证明缓存命中，否则就是缓存不命中，就需要加载内存数据到内存中。下图中的任何一个内存块都可能被映射到左边任意一行缓存行，内存序号保存到tag中。</p>
+<img src="https://github.com/user-attachments/assets/5d436f65-5fd8-4535-a103-98c9988b1e8c" alt="Image" style="max-width:100%;">
+<h3>组相联映射</h3>
+<p>组相联映射方式是一种结合了直接映射和全相联映射的映射方式，在这种方式下，多个缓存行（比如说2行或者4行，甚至更多）被划成一组：</p>
+</code>`<code>c
+<p>v = m / k</p>
+<p>where</p>
+<p>m = number of cache lines in the cache memory</p>
+<p>k = number of cache lines we want in each set</p>
+<p>v = number of sets</p>
+</code>`<code>
+<p>通过这样的方式，每个内存块也可以被加载到一个特定缓存行组的任意缓存行：</p>
+</code>`<code>C
+<p>i = j modulo v = j % v</p>
+<p>where</p>
+<p>j = main memory block number</p>
+<p>v = number of sets</p>
+<p>i = cache line set number</p>
+</code>`<code>
+<p>一个内存块地址会被划分到某个缓存行组内，在这个缓存行组内，它可以被映射到任意一行缓存行。组相联映射方式下的缓存地址结构如下所示：</p>
+<img src="https://github.com/user-attachments/assets/cde1b3f4-3932-4faa-bacf-9748004cd306" alt="Image" style="max-width:100%;">
+<p>这种反射光hi减少了直接映射的conflict miss的情况，同时限制了缓存行tag的查找（全相联映射中相当于遍历一遍缓存行查找）。比如一个2行缓存行构成一个缓存行组，我们有8个内存块和四个缓存行，因此我们就有两个缓存组。首先，我们使用直接映射策略，内存块0映射到组0， 内存块1映射到缓存行组1，内存块2映射到缓存行组0... 此时，缓存行的tag就用来在组内查找对应的内存块（也就是组内的Full Associate Mapping）。</p>
+<img src="https://github.com/user-attachments/assets/4b196c12-952d-4eed-9747-c268328aedef" alt="Image" style="max-width:100%;">
+<h1>缓存不一致问题</h1>
+<p>多核CPU使用缓存访问内存数据，就会产生缓存数据与内存数据不一致的问题。比如说，核心A需要读取内存中的D数据，而核心B需要更新内存中的D数据，他们都通过缓存执行操作。那么就有可能核心B已经将内存数据D更新了，但是核心A仍然使用缓存中的旧数据，这就是缓存不一致问题。除了读写之外，核心B在写的时候，也是先写到缓存，这也导致了核心B的缓存中的数据D和内存中的数据D不一致，这也是缓存不一致问题。</p>
+<p>读取时，如果发现缓存的数据和内存的数据不一致（缓存数据失效），可以直接从内存中load数据到缓存中解决问题；但是写数据到缓存后，什么时候写回数据是不一样的，写的场景分为了Write Through和Write Back两种方式。</p>
+<h2>Write Through</h2>
+<p>在Write Through场景中，数据是同时更新到缓存和内存的，这个过程简单而可靠，能确保负责写的核心始终能确保缓存和内存的数据一致，这个在写核心比较少的时候使用的比较多。但是，这也削减了缓存的作用，缓存存在的目的就是为了减少CPU直接访问内存，因为直接访问内存的速度比起访问缓存慢得多。</p>
+<img src="https://github.com/user-attachments/assets/3926a644-244c-4474-a692-b396b7ca6df2" alt="Image" style="max-width:100%;">
+<h2>Wite Back</h2>
+<p>在Wite Back场景中，数据只在缓存中更新，并随后在内存中更新。更新到内存时，其实就是缓存行要被替换的时候。这种操作就避免了每次写数据时都要访问内存，从而减慢CPU的速度。</p>
+<img src="https://github.com/user-attachments/assets/c39c1fbd-199e-4835-8b25-6879427cdf86" alt="Image" style="max-width:100%;">
+<p>在Write Back场景下，多核CPU可能出现多个CPU内的缓存（L1和L2）数据不一致的问题，比如上述的例子，核心B写了缓存，但是因为Write Back策略并没有及时写到内存中，核心A、C和其他核心从内存读到的数据和核心B的缓存数据就不一致，因此必须有机制来解决多核CPU缓存不一致的问题，这就需要保证：</p>
+<p>* CPU进行缓存数据更新时需要告知其他CPU，也就是<strong>写传播</strong></p>
+<p>* 多核CPU对同一个数据的修改顺序，对于其他CPU而言是一致的，即事务串行化。举个例子，核心A和B同时修改了数据D，核心A将修改数据广播给了核心B，C和E，核心B将修改数据广播给了核心A，C和E。对于和新C，它先后收到了核心A和B的广播，但是核心E先收到了核心B的广播，才收到了核心A的广播，这就导致核心C和E的缓存数据不一致了。为了避免这个问题，对同一个数据的修改必须维持<strong>串行化</strong>，也就是不能同时修改，只能串行修改，要么是核心A先修改，然后核心B修改；要么就是核心B先修改，然后是核心A修改；没有其他情况。</p>
+<p>为了实现缓存事务的串行化，缓存一致性协议（MESI）被发明出来了。</p>
+<h1>MESI</h1>
+<p>MESI协议规定了缓存只能有四种状态：</p>
+<p>* Modified，已修改，该缓存行旨在当前的缓存有效，并且已经被标记为dirty，并需要在随后写回内存。在此之前，任何从该内存的读取行为都不被允许，写回的动作会将当前缓存状态变更为S；</p>
+<p>* Exclusive，独占，该缓存行只出现在当前CPU，并且是clean的，和内存保持一致，但随时可能被变更为S状态（被读取），也会被改为M如果写缓存；</p>
+<p>* Shared，共享，该缓存行可能也被load到了其他CPU，并且是clean的，和内存一致，但是随时可能被变更为I状态；</p>
+<p>* Invalidated，已失效，该缓存行已失效。</p>
+<p>维基百科给出了一个表用来描述任意一个缓存行的状态：</p>
+<img src="https://github.com/user-attachments/assets/8c9b2420-7d04-44cf-9e79-a84165863f57" alt="Image" style="max-width:100%;">
+<p>可以看出，当一个缓存行被标记为M或者是E时，其他核心的缓存状态都会被改为I。有一个表格，用来描述如何维护MESI这个精密涉及的状态机：</p>
+<p>|当前状态 | 事件 | 状态流转规则|</p>
+<p>|-- | -- | --|</p>
+<p>|I（已失效） | Local Read | 由于当前缓存行失效，需要重新从内存中读取数据：・其他 CPU 中没有该数据，直接从内存中读取数据，并将缓存行状态置为 E・其他 CPU 中存在该数据，且对应缓存行状态为 M要先将其他 CPU 中数据写回到内存中后再读取内存数据，并将缓存行状态置为 S・其他 CPU 中存在该数据，且对应缓存行状态为 S 或 E，从内存中读取数据，并将缓存行状态置为 S|</p>
+<p>|  | Local Write | 由于当前缓存行失效，需要重新从内存中读取数据：・其他 CPU 中没有该数据，直接从内存中读取数据，修改数据后将缓存行状态置为 M・其他 CPU 中存在该数据，且对应缓存行状态为 M，要先将其他 CPU 中数据写回到内存中并将缓存行状态置为 I，然后本地再读取内存数据，修改数据后将缓存行状置为 M・其他 CPU 中存在该数据，且对应缓存行状态为 S 或 E，本地 CPU 从内存中读取数据并将缓存行状态置为 M，同时其他 CPU 将缓存行状态置为 I|</p>
+<p>|  | Remote Read | 本地数据已失效，其他 CPU 读写操作不会再引起状态变化|</p>
+<p>|  | Remote Write | 本地数据已失效，其他 CPU 读写操作不会再引起状态变化|</p>
+<p>|E（独占） | Local Read | 状态不变|</p>
+<p>|  | Local Write | 状态变为 M|</p>
+<p>|  | Remote Read | 其他 CPU 访问数据，不再独占，状态变为 S|</p>
+<p>|  | Remote Write | 数据被其他 CPU 修改，本地缓存数据失效，状态变为 I|</p>
+<p>|S（共享） | Local Read | 状态不变|</p>
+<p>|  | Local Write | 本地状态变为 M，其他 CPU 中缓存该数据的缓存行状态变为 I|</p>
+<p>|  | Remote Read | 状态不变|</p>
+<p>|  | Remote Write | 数据被其他 CPU 修改，本地缓存数据失效，状态变为 I|</p>
+<p>|M（已修改） | Local Read | 状态不变|</p>
+<p>|  | Local Write | 状态不变|</p>
+<p>|  | Remote Read | 其他 CPU 需要访问最新数据，需要将数据写入内存中，状态变为 S|</p>
+<p>| | Remote Write | 其他 CPU 需要访问最新数据，需要将数据写入内存中，由于其他 CPU 获取数据后又修改了数据，因此状态变为 I|</p>
+<p>| | Remote Read | 其他 CPU 需要访问最新数据，需要将数据写入内存中，状态变为 S|</p>
+<p>|  | Remote Write | 其他 CPU 需要访问最新数据，需要将数据写入内存中，由于其他 CPU 获取数据后又修改了数据，因此状态变为 I|</p>
+<p>下面举例说明这四个状态的变化，我们假设芯片上有两个CPU，分别是CPU1， CPU2；他们都要访问内存上的数据D，数据读取到CPU1的缓存后，被称为D1，加载到CPU2后被称为D2，初始状态下CPU1和CPU2都没有缓存D数据，然后开始读取：</p>
+<li>CPU1读取数据D</li>
+<p>   * 因为数据D不在CPU1缓存，所以缓存不命中，CPU1发送请求到内存或者其他缓存</p>
+<p>   * 数据D被加载到CPU1缓存，缓存上数据为D1，并标注状态为<strong>S（Shared）</strong>；</p>
+<p> 2. CPU2要读取数据D</p>
+<p>   * 数据D不在CPU2缓存，缓存不命中，CPU2发送请求到内存或者其他缓存</p>
+<p>   * 数据D被加载到CPU2缓存，缓存上数据为D2，并标注状态为<strong>S（Shared）</strong>，同时通知CPU1，D处于S状态；</p>
+<p> 3. CPU1要修改数据D1：</p>
+<p>    * 因为数据D1的状态是<strong>S(Shared)</strong>，为了修改D，CPU1需要鲜活的D的独占权，因此CPU1会向总线发送<strong>I(Invalidate)</strong>请求，表示要修改数据，并将其他缓存的Dx状态改为<strong>I(Invalidated)</strong>；</p>
+<p>    * CPU2收到<strong>I(Invalidate)</strong>请求后，修改本地D2的状态为<strong>I(Invalidated)</strong>，然后回复<strong>Invalidate ack</strong>；</p>
+<p>    * CPU1收到其他CPU的<strong>Invalidate ack</strong>后，将本地缓存中D1的状态改为<strong>M(Modified)</strong>，然后修改数据D1</p>
+<p> 4. CPU2再次读取D</p>
+<p>    * 由于本地缓存D2的状态为<strong>I(Invalidated)</strong>，因此缓存不命中，CPU2发送读请求；</p>
+<p>    * CPU1监听到读请求，检测到本地缓存D1的状态是<strong>M(Modified)</strong>，将数据写回（Write Back）内存，并更新本地缓存数据D1的状态为<strong>S(Shared)</strong>，同时确认CPU2的请求；</p>
+<p>    * CPU2收到确认，加载数据D到缓存D2，状态变更为<strong>S(Shared)</strong>。</p>
+<p>这就是一个CPU缓存一致性的实现例子，有一个动画网站可以实时模拟CPU缓存的状态，强烈建议去动手操作下，感受下缓存的状态变更和一致性维护：<a href="https://www.scss.tcd.ie/Jeremy.Jones/VivioJS/caches/MESIHelp.htm">MESI Protocol</a></p>
+<h1><strong>Store Buffer</strong>和<strong>Invalidate Queue</strong></h1>
+<p>通过前面的介绍，我们知道缓存的引入解决了CPU速度快，内存速度慢而导致的计算速度瓶颈问题；而缓存的多核读写访问带来的一致性问题也可以通过MESI缓存一致性解决，似乎CPU、缓存和内存之间已经可以配合得天衣无缝，满足所有需求了，但结论是还不够。MESI协议每次在写数据时，都要对其他CPU发送一个<strong>Invalidate</strong>请求广播，并等待其他CPU的响应，这段空等的时间无疑是对性能的浪费，于是我们可以新增中间层来解决这个问题，也就是<strong>Store Buffer</strong>和<strong>Invalidate Queue</strong>。</p>
+<h2><strong>Store Buffer</strong></h2>
+<p>MESI在写操作时，需要发送发送一个<strong>Invalidate</strong>请求广播，并等待其他CPU的响应，引入<strong>Store Buffer</strong>后，数据直接写到<strong>Store Buffer</strong>中，然后立即返回执行其他操作，<strong>Store Buffer</strong>会异步发送广播消息，在收到其他CPU的响应后，才会将数据从<strong>Store Buffer</strong>写到缓存行中。但是这也有一个问题，引入Store Buffer之后，CPU就有两个地方存储了同一个数据，分别是缓存和Store Buffer，当新数据写入到Store Buffer后，CPU实际上就有两个地方获取这个数据，CPU获取的原则是总是获取最新的数据，这种方式也叫<strong>Load Forwarding</strong>，即CPU会先去Store Buffer中查找，如果查找到了对应数据，就是用Store Buffer的数据，否则就从缓存中读取。</p>
+<img src="https://github.com/user-attachments/assets/189b5817-faac-4790-b0c2-c50c6a1d59c6" alt="Image" style="max-width:100%;">
+<h3>举例</h3>
+<p>我们还是通过例子来理解：</p>
+<p>#### 读写示例</p>
+<li>我们假设有四个CPU，CPU0， CPU1，CPU2和CPU3，内存上有一个数据D，D的初始值是0，现在每个CPU都要读取D：</li>
+<p>   * 所有CPU访问缓存发现没有D，缓存不命中</p>
+<p>   * 所有CPU加载D到缓存中</p>
+<p>   * 按照MESI协议，将D的状态变更为Shared（S）</p>
+<p>   * 所有CPU都持有一个D，值为0</p>
+<li>CPU0需要写入D，写入值为1</li>
+<p>   * CPU0执行操作D=1</p>
+<p>   * 写入操作更新到Store Buffer，缓存不更新</p>
+<p>   * 此时，CPU0的缓存中D=0， Store Buffer中D=1</p>
+<li>CPU0再读取D （Load Forwarding)</li>
+<p>   * CPU0从自己的Store Buffer中读取D，而不是从缓存中读取，这叫Load Forwarding</p>
+<p>   * CPU0读取到的D为1，此时也没有写入到缓存</p>
+<li>CPU1，CPU2和CPU3继续读取D</li>
+<p>   * 这三个核心的缓存中的D仍然是0，状态是Shared</p>
+<p>   * 由于CPU0的写入未同步到CPU0的缓存，目前其他CPU读取到的仍然是0，也就是说写操作对其他CPU仍然不可见</p>
+<li>Store Buffer Flush（写入cache）</li>
+<p>   * CPU0的Store Buffer将D=1写入到CPU0的L1缓存</p>
+<p>   * 由于L1缓存更新，触发MESI状态机写入流程</p>
+<p>#### MESI 写操作</p>
+<p>写一个缓存行（D） 时必须确保其他CPU不再使用旧的缓存，此时就需要MESI的交互：</p>
+<li>CPU0发出“BusRdX"，表示我要独占这个缓存行</li>
+<p>   * 在MESI中，这个操作表示：我要写这个地址，其他CPU请将这个地址的数据状态变更为Invalidated</p>
+<p>   * 其他CPU发现自己缓存了这个数据，并且状态未Shared（S），就将状态变更为Invalid（I） </p>
+<p>   * 如果有某个CPU发现缓存的数据是Modified（M），还需要将数据先写回内存</p>
+<li>CPU0获得数据D的独占权限后，将状态改为Modified</li>
+<p>   * 现在CPU0的缓存中有D，并且是Modified</p>
+<p>   * 将Store Buffer中的X=1写回缓存</p>
+<li>此时CPU0的写操作被写回了缓存，状态为Modified</li>
+<p>   * 其他CPU的对应缓存行失效</p>
+<p>   * 当其他CPU再次读取D时，会发现状态时Invalid，缓存不命中，必须从CPU1或者是内存中读取最新值，最终读取到X=1</p>
+<p>上面提到的在CPU0未将Store Buffer的D=1写到缓存之前，其他CPU获取D会得到一个旧的值，因此需要一些内存屏障来阻止此时其他CPU对D的访问，这留到后续篇幅解释。</p>
+<h2>Invalidate Queue</h2>
+<p>在前面的介绍中，CPU写入数据是先写到Store Buffer，由Store Buffer发送Invalidate到其他CPU，因此也是Store Buffer处理其他CPU的Invalidate ack。这就引入了另一个问题，如果此时CPU在处理其他任务而无法处理其他CPU的Invalidate ack，有限大小的Store Buffer就会被堆积溢出。为了解决这个问题，使得CPU能够尽可能及时处理Invalidate ack，引入了Invalidate Queue，用来存储其他CPU的Invalidate ACK，并立即响应其他CPU，然后再由Invalidate Queue异步处理缓存行失效操作。</p>
+<img src="https://github.com/user-attachments/assets/b6d3c3e9-35f3-4607-86a8-4f49d9c5c163" alt="Image" style="max-width:100%;">
+<h3>例子</h3>
+<p>再通过例子理解Invalidate Queue的作用。我们假设此时数据是X，存在四个CPU读取，当前CPU都读取了X=0，然后CPU1要写X：</p>
+<p>时刻 | CPU1 | CPU0/2/3</p>
+<p>|-- | -- | --|</p>
+<p>|t1 | 准备写 X（X=1） | 正常缓存 X=0（Shared）|</p>
+<p>|t2 | 发出 BusRdX，请求独占 | 收到失效请求，放入 Invalidate Queue（还没真正执行）|</p>
+<p>|t3 | CPU1 认为其他核心已“失效”，提交 Store Buffer 中的 X=1 | 但 CPU0/2/3 其实仍然缓存旧值 X=0（状态未变）|</p>
+<p>|t4 | CPU0 执行对 X 的读操作 | 仍然使用自己的缓存，读到旧值 0 ❗|</p>
+<p>由此可见，Store Buffer是CPU的发送缓冲区，Invalidate Queue是接收缓冲区。他们都可能导致数据访问乱序，比如以下：</p>
+</code>`<code>C
+<p>int a = 0;</p>
+<p>int flag = 0;</p>
+<p>void thread1() {</p>
+<p>    a = 1;</p>
+<p>    flag = 1;</p>
+<p>}</p>
+<p>void thread2() {</p>
+<p>    if (flag == 1) {</p>
+<p>        printf("%d\n", a);</p>
+<p>    }</p>
+<p>}</p>
+</code>`<code>
+<p>在讲解之前，我们需要知道，现代CPU采用了多级流水线技术执行指令，一条指令的执行被划分为四个过程：取指令、指令译码、指令执行和数据写回。虽然从代码上看</code>a = 1<code> 和 </code>flag = 1<code>是先后顺序，但是实际上CPU的执行可能是先执行 </code>flag = 1<code>，当然哪怕是</code>a = 1<code>先执行也可能有问题：</p>
+<li>CPU1的写</code>a=1<code>提交成功，StoreBuffer刷新；</li>
+<li></code>flag=1<code>被提交，CPU2 可见</li>
+<li>当CPU2看到flag == 1时，尝试读取a</li>
+<li>CPU2尚未处理a的失效请求（Invalidate Queue的存在），仍然使用旧的值a=0；</li>
+<li>最终CPU2读到旧的值0，而不是最新值1.</li>
+<p>解决方法：使用内存屏障！</p>
+<h2>内存屏障</h2>
+<p>不同的平台有不同的内存屏障实现，比如：</p>
+<p>* PowerPC平台使用类似于GCC的内联汇编原语</code>asm volatile("lwsync" ::: "memory")<code></p>
+<p>* Win32的interlocked 操作</p>
+<p>* C++11的原子类型，比如</code>load(std::memory_order_acquire)<code></p>
+<p>* POSIX的mutex操作，比如</code>pthread_mutex_lock`</p>
+<p>上述的内存屏障（或类似功能的指令）都</p>
+<h1>Reference</h1>
+<li>http://gec.di.uminho.pt/discip/minf/ac0102/1000gap_proc-mem_speed.pdf</li>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #115</p>
+    </footer>
+</body>
+</html>

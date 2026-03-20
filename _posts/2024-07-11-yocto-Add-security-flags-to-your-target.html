@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[yocto] Add security flags to your target - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[yocto] Add security flags to your target</h1>
+    <p class="date">2024-07-11</p>
+    <div class="labels"><span class="label">Yocto</span> </div>
+    <hr>
+    <div class="content">
+<p>安全已经是一个日益重要的话题了，在嵌入式领域也是如此。在CTF比赛中，PWN类型的题目更是利用了多种漏洞实现攻击的目的。因此，在软件的编译过程中，为软件添加一些安全编译选项可以加强软件的安全性。常见的安全编译选项有：</p>
+<p>* Canary： 用于防止栈溢出，-fstack-protector-strong/all</p>
+<p>* NX： 栈不可执行 -Wl,-z noexecstack</p>
+<p>* RELRO： 立即绑定/延时绑定，对GOT表的保护, -Wl,-z,now</p>
+<p>* FORTIFY：字符串相关, -D_FORTIFY_SOURCE</p>
+<p>* PIE：地址随机化， -fPIE -pie</p>
+<p>* PIC：地址无关 -fPIC</p>
+<p>Yocto也提供了相应的编译保护措施，只是并不是默认开启，这里也提供了指导：<a href="https://docs.yoctoproject.org/dev/dev-manual/securing-images.html#making-images-more-secure">Making Images More Secure</a>。但是，我在我的项目中在Machine的配置文件中添加并不成功，而需要在meta-layer下的conf/layers.bb文件中添加才行：</p>
+<p>``<code></p>
+<p>BBFILE_COLLECTIONS += "xxx"</p>
+<p>BBFILE_PATTERN_xxx = "^${LAYERDIR}/"</p>
+<p>BBFILE_PRIORITY_xxx = "11"</p>
+<p>include conf/distro/include/security_flags.inc</p>
+<p>IMAGE_CLASSES += "image_types_xxx"</p>
+<p>IMAGE_OVERHEAD_FACTOR = "1.2"</p>
+</code>`<code>
+<p>其中，有一些package是自定义的编译方法，无法通过这种方式实现，只能单独添加：</p>
+<p>xxx.bb:</p>
+</code>`<code>
+<p>xxx</p>
+<p>do_compile() {</p>
+<p>	${CC} -Wall md5.c fwunpack.c -o fwunpack</p>
+<p>}</p>
+<p>xxx</p>
+</code>`<code>
+<p>这种只能手动添加：</p>
+</code>`<code>
+<p>xxx</p>
+<p>do_compile() {</p>
+<p>	${CC} -Wall md5.c fwunpack.c -fstack-protector-strong -Wl -z now  -o fwunpack</p>
+<p>}</p>
+<p>xxx</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #57</p>
+    </footer>
+</body>
+</html>

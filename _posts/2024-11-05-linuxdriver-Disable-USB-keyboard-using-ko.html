@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[linux][driver] Disable USB keyboard using ko - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[linux][driver] Disable USB keyboard using ko</h1>
+    <p class="date">2024-11-05</p>
+    <div class="labels"><span class="label">Linux</span> <span class="label">driver</span> </div>
+    <hr>
+    <div class="content">
+<p>在linux的设备管理中，USB的人机交互设备（Human Interface Device）有统一的ko进行管理：USBHID，根据nxp的kconfig描述，基于USBHID还衍生了USBKBD，专门用于管理键盘，但是USBKBD和USBHID不是与的关系，用了USBKBD，就无法用USBHID去加载键盘，详细信息查看<a href="https://github.com/nxp-imx/linux-imx/blob/imx_4.14.98_2.0.13/drivers/hid/usbhid/Kconfig">kconfig</a>。</p>
+<p>但是，在项目中，把usbkbd.ko去除后，还是自动通过usbhid.ko识别并加载了键盘。这应该也是从另一个角度说明了，usbkbd和usbhid的关系，如果有usbkbd，就通过usbkbd去识别和加载键盘，否则就通过usbhid识别和加载。</p>
+<p>在runtime中，通过将usbhid.ko和usbkbd.ko改名为usbhid.ko.old和usbkbd.ko.old后，设备无法加载识别键盘，这可以通过dmesg和/dev/input/event2查看和验证。因此第一版本的修改思路就是将ko改名：将usbhid.ko改为invisibleusbhid.ko，usbkbd.ko改为invisibleusbkbd.ko。但是验证后还是能识别键盘，经过定位发现在编译时，生成了一个文件：</p>
+<p>``<code></p>
+<p>sudo grep -rn "invisibleusbhid.ko"</p>
+</code>``
+<img src="https://github.com/user-attachments/assets/3c608aa5-aede-4b0a-b1a6-3a7ffa8e066c" alt="image" style="max-width:100%;">
+<p>因此，有理由怀疑，在do_install_apend里改名字，也会被记录到内核ko的属性中，因此无法通过改名实现。因此直接在do_install_append中将这两个ko删除了，最后验证通过。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #74</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>03 ATF(Arm Trusted Firmware)介绍和仿真 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>03 ATF(Arm Trusted Firmware)介绍和仿真</h1>
+    <p class="date">2025-02-28</p>
+    <div class="labels"><span class="label">TrustZone</span> <span class="label">TEE</span> <span class="label">ARMv8</span> </div>
+    <hr>
+    <div class="content">
+<h1>ATF的启动流程</h1>
+<p>从TF-A（Arm-Trusted-Firmware）的启动流程可以看出，支持TrustZone的SoC的启动从BootROM开始，BootROM被称为BL1，然后BL1启动BL2，BL2启动BL31，BL31负责启动BL32和BL33，最后才是Kernel的启动：</p>
+<img src="https://github.com/user-attachments/assets/1855f30f-fe1d-416a-92bc-97afe4b8197e" alt="image" style="max-width:100%;">
+<p>其中的一些概念：</p>
+<p>* TF-A(ATF, Arm-Trusted-Firmware)：ARM安全固件，运行再EL3异常级别，我们常说的ATF实际上包括了BL1、BL2和BL31.</p>
+<p>* BL1： BootROM芯片上一块只读的代码区，具有最高的执行权限EL3。这段代码由芯片厂商编写，并在出厂时就固化为只读，厂商自己也无法更改，这也是Secure Boot的信任锚。</p>
+<p>* BL2：平台初始化固件，用来完成平台相关的初始化，比如对DDR的初始化等，因为BL31和BL32是一个runtime，所以在加载之前必须初始化设备的DDR，这就是有BL2完成的。</p>
+<p>* BL31：BL31实际上是一个常驻的runtime，负责为Non-Secure和Secure world之间的SMC指令提供服务和切换，BL31完成了硬件抽象的作用，为上层的OS（或者是virtualization）提供服务，同时完成一些EL3级别的指令，比如关机、睡眠等，这个固件也是由芯片厂商支持实现。</p>
+<p>* BL32：BL32就是我们常说的TEE OS，比如常见的op-tee或者trustonic等厂商开发的Secure OS，在Secure OS上通常还会有对应的Trusted Application(TA)，BL32运行在EL1中（Secure World没有EL2）。</p>
+<p>* BL33：BL33是Non-Secure World（或者说Normal World）的非安全固件，一般就是UEFI或者u-boot，作用是启动Normal World的REE OS，比如Linux等，u-boot也运行在EL3。</p>
+<p>这几个固件的启动过程如下：</p>
+<p>``<code>bash</p>
+<p>BL1 --> BL2 --> BL31 -->BL32 --> BL33 --> REE OS</p>
+</code>`<code>
+<h1>试验</h1>
+<p>我们可以通过qemu来仿真查看这一套的启动流程，但是手动仿真目前暂时无法拉起TEE OS，因此我们将观察BL1启动到BL33，也就是u-boot的过程。</p>
+<h2>ATF 代码编译</h2>
+<p>ARM的github仓库中，提供了完整的ATF代码，我们使用官方提供的ATF代码来演示：</p>
+<p>* 下载ATF代码</p>
+</code>`<code>bash
+<p>git clone https://github.com/ARM-software/arm-trusted-firmware.git</p>
+</code>`<code>
+<p>* 交叉编译工具安装</p>
+<p>由于目前我们仿真的是ARMv8的架构，ARMv8.2架构中有一条esb指令，在低版本的gcc编译器中无法识别，如果使用的是ubuntu-20.04，那么默认的aarch-linux-gnu-gcc 9.x版本将无法通过编译：</p>
+</code>`<code>bash
+<p>$ make CROSS_COMPILE=aarch64-linux-gnu- PLAT=qemu DEBUG=1 all</p>
+<p>Building qemu</p>
+<p>  AS      lib/cpus/aarch64/neoverse_n1.S</p>
+<p>lib/cpus/aarch64/neoverse_n1.S: Assembler messages:</p>
+<p>lib/cpus/aarch64/neoverse_n1.S:277: Error: selected processor does not support </code>esb'</p>
+<p>make: <em>*</em> [Makefile:1563: /mnt/disk/study/tee-docker/arm-trusted-firmware/build/qemu/debug/bl1/neoverse_n1.o] Error 1</p>
+<p>``<code></p>
+<p>我们需要从ARM官网或者是Linaro官网下载对应的编译器版本才行，我使用的是<a href="https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz ">ARM的13.2版本的编译器</a>。</p>
+<p>安装编译器：</p>
+</code>`<code>bash
+<p>sudo mkdir -p /opt/toolchain</p>
+<p>wget https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz </p>
+<p>tar -xvf arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz  -C  /opt/toolchain</p>
+<p>export PATH=/opt/toolchain/arm-gnu-toolchain-13.2.Rel1-x86_64-aarch64-none-linux-gnu/bin:$PATH</p>
+</code>`<code>
+<p>然后再编译</p>
+</code>`<code>bash
+<p>make CROSS_COMPILE=aarch64-none-linux-gnu-  PLAT=qemu DEBUG=1 all</p>
+</code>`<code>
+<p>编译完成后，会在</code>build/qemu/debug<code>目录下生成bl1.bin, bl2.bin和bl3.bin：</p>
+</code>`<code>bash
+<p>$ ll build/qemu/debug/</p>
+<p>total 160K</p>
+<p>drwxrwxr-x 3 quanwen quanwen 4.0K 2月  27 17:02 bl1</p>
+<p>-rwxrwxr-x 1 quanwen quanwen  33K 2月  27 17:02 bl1.bin</p>
+<p>drwxrwxr-x 3 quanwen quanwen 4.0K 2月  27 17:02 bl2</p>
+<p>-rwxrwxr-x 1 quanwen quanwen  33K 2月  27 17:02 bl2.bin</p>
+<p>drwxrwxr-x 3 quanwen quanwen 4.0K 2月  27 17:02 bl31</p>
+<p>-rwxrwxr-x 1 quanwen quanwen  61K 2月  27 17:02 bl31.bin</p>
+<p>drwxrwxr-x 2 quanwen quanwen 4.0K 2月  27 16:38 lib</p>
+<p>drwxrwxr-x 2 quanwen quanwen 4.0K 2月  27 16:38 libc</p>
+<p>drwxrwxr-x 2 quanwen quanwen 4.0K 2月  27 16:38 libfdt</p>
+</code>`<code>
+<p>如果不考虑BL33.bin的运行，我们现在就可以通过qemu仿真运行ATF：</p>
+</code>`<code>bash
+<p>$ qemu-system-aarch64 -nographic -machine virt,secure=on \</p>
+<p>-cpu cortex-a53 \</p>
+<p>-smp 2 -m 2048 \</p>
+<p>-d guest_errors,unimp \</p>
+<p>-bios ./bl1.bin \</p>
+<p>-semihosting-config enable=on,target=native</p>
+</code>`<code>
+<img src="https://github.com/user-attachments/assets/e5d4990b-cd8d-4753-b040-049f91e82ec7" alt="Image" style="max-width:100%;">
+<p>由于缺失BL33.bin，BL2.bin再检查时会失败，所以只运行到了BL2.bin。这些Image内部也有排序，BL1是Image 1，BL2 是Image 2，BL31是Image 3， BL32 是Image 4, BL33是Image 5。由于Secure OS可能并不会运行，因此缺失Image 4是没问题的，但是BL33是必须的，所以上图就是因为缺失Image 5（BL33，也就是u-boot）而报错停止。</p>
+<h2>u-boot代码编译</h2>
+<p>* 从官方仓库下载u-boot代码：</p>
+</code>`<code>bash
+<p>git clone https://github.com/u-boot/u-boot.git</p>
+</code>`<code>
+<p>* 编译u-boot</p>
+</code>`<code>bash
+<p>cd u-boot</p>
+<p>export ARCH=arm64</p>
+<p>export CROSS_COMPILE=aarch64-none-linux-gnu-</p>
+<p>make qemu_arm64_defconfig</p>
+<p>make -j16</p>
+</code>`<code>
+<p>为了方便调试，我们在某个位置创建blxx.bin的软连接：</p>
+</code>`<code>
+<p>ln -s ../official-uboot/u-boot/u-boot.bin ./bl33.bin</p>
+<p>ln -s ../arm-trusted-firmware/build/qemu/debug/bl31.bin bl31.bin</p>
+<p>ln -s ../arm-trusted-firmware/build/qemu/debug/bl2bin  bl2.bin</p>
+<p>ln -s ../arm-trusted-firmware/build/qemu/debug/bl1.bin bl1.bin</p>
+</code>`<code>
+<p>然后再运行：</p>
+</code>`<code>bash
+<p>$ qemu-system-aarch64 -nographic -machine virt,secure=on \</p>
+<p>-cpu cortex-a53 \</p>
+<p>-smp 2 -m 2048 \</p>
+<p>-d guest_errors,unimp \</p>
+<p>-bios ./bl1.bin \</p>
+<p>-semihosting-config enable=on,target=native</p>
+<p>NOTICE:  Booting Trusted Firmware</p>
+<p>NOTICE:  BL1: v2.12.0(debug):v2.12.0-626-gbac623d18</p>
+<p>NOTICE:  BL1: Built : 16:38:30, Feb 27 2025</p>
+<p>INFO:    BL1: RAM 0xe0ee000 - 0xe0f6000</p>
+<p>WARNING: BL1: cortex_a53: CPU workaround for erratum 835769 was missing!</p>
+<p>WARNING: BL1: cortex_a53: CPU workaround for erratum 843419 was missing!</p>
+<p>WARNING: BL1: cortex_a53: CPU workaround for erratum 855873 was missing!</p>
+<p>WARNING: BL1: cortex_a53: CPU workaround for erratum 1530924 was missing!</p>
+<p>INFO:    BL1: Loading BL2</p>
+<p>WARNING: Firmware Image Package header check failed.</p>
+<p>INFO:    Loading image id=1 at address 0xe05b000</p>
+<p>INFO:    Image id=1 loaded: 0xe05b000 - 0xe063201</p>
+<p>NOTICE:  BL1: Booting BL2</p>
+<p>INFO:    Entry point address = 0xe05b000</p>
+<p>INFO:    SPSR = 0x3c5</p>
+<p>NOTICE:  BL2: v2.12.0(debug):v2.12.0-626-gbac623d18</p>
+<p>NOTICE:  BL2: Built : 17:02:10, Feb 27 2025</p>
+<p>INFO:    BL2: Doing platform setup</p>
+<p>INFO:    BL2: Loading image id 3</p>
+<p>WARNING: Firmware Image Package header check failed.</p>
+<p>INFO:    Loading image id=3 at address 0xe090000</p>
+<p>INFO:    Image id=3 loaded: 0xe090000 - 0xe09f0c4</p>
+<p>INFO:    BL2: Loading image id 5</p>
+<p>WARNING: Firmware Image Package header check failed.</p>
+<p>INFO:    Loading image id=5 at address 0x60000000</p>
+<p>INFO:    Image id=5 loaded: 0x60000000 - 0x60115578</p>
+<p>NOTICE:  BL1: Booting BL31</p>
+<p>INFO:    Entry point address = 0xe090000</p>
+<p>INFO:    SPSR = 0x3cd</p>
+<p>NOTICE:  BL31: v2.12.0(debug):v2.12.0-626-gbac623d18</p>
+<p>NOTICE:  BL31: Built : 17:02:11, Feb 27 2025</p>
+<p>INFO:    ARM GICv2 driver initialized</p>
+<p>INFO:    BL31: Initializing runtime services</p>
+<p>WARNING: BL31: cortex_a53: CPU workaround for erratum 835769 was missing!</p>
+<p>WARNING: BL31: cortex_a53: CPU workaround for erratum 843419 was missing!</p>
+<p>WARNING: BL31: cortex_a53: CPU workaround for erratum 855873 was missing!</p>
+<p>WARNING: BL31: cortex_a53: CPU workaround for erratum 1530924 was missing!</p>
+<p>INFO:    BL31: Preparing for EL3 exit to normal world</p>
+<p>INFO:    Entry point address = 0x60000000</p>
+<p>INFO:    SPSR = 0x3c5</p>
+<p>Bloblist at 0 not found (err=-2)</p>
+<p>alloc space exhausted ptr 400 limit 0</p>
+<p>Bloblist at 0 not found (err=-2)</p>
+<p>U-Boot 2025.04-rc3-00014-gb78f8677cde8 (Feb 28 2025 - 17:52:30 +0800)</p>
+<p>DRAM:  2 GiB</p>
+<p>Core:  51 devices, 14 uclasses, devicetree: board</p>
+<p>Flash: 32 MiB</p>
+<p>Loading Environment from Flash... <em>*</em> Warning - bad CRC, using default environment</p>
+<p>In:    serial,usbkbd</p>
+<p>Out:   serial,vidconsole</p>
+<p>Err:   serial,vidconsole</p>
+<p>No USB controllers found</p>
+<p>Net:   eth0: virtio-net#32</p>
+<p>starting USB...</p>
+<p>No USB controllers found</p>
+<p>Hit any key to stop autoboot:  0 </p>
+<p>Scanning for bootflows in all bootdevs</p>
+<p>Seq  Method       State   Uclass    Part  Name                      Filename</p>
+<p>---  -----------  ------  --------  ----  ------------------------  ----------------</p>
+<p>Scanning global bootmeth 'efi_mgr':</p>
+<p>Cannot persist EFI variables without system partition</p>
+<p>Missing TPMv2 device for EFI_TCG_PROTOCOL</p>
+<p>Missing RNG device for EFI_RNG_PROTOCOL</p>
+<p>Scanning bootdev 'fw-cfg@9020000.bootdev':</p>
+<p>fatal: no kernel available</p>
+<p>No USB controllers found</p>
+<p>scanning bus for devices...</p>
+<p>Scanning bootdev 'virtio-net#32.bootdev':</p>
+<p>BOOTP broadcast 1</p>
+<p>DHCP client bound to address 10.0.2.15 (1 ms)</p>
+<p><em>*</em> Warning: no boot file name; using '0A00020F.img'</p>
+<p>Using virtio-net#32 device</p>
+<p>TFTP from server 10.0.2.2; our IP address is 10.0.2.15</p>
+<p>Filename '0A00020F.img'.</p>
+<p>Load address: 0x40400000</p>
+<p>Loading: *</p>
+<p>TFTP error: 'Access violation' (2)</p>
+<p>Not retrying...</p>
+<p>No more bootdevs</p>
+<p>---  -----------  ------  --------  ----  ------------------------  ----------------</p>
+<p>(0 bootflows, 0 valid)</p>
+<p>=> version</p>
+<p>U-Boot 2025.04-rc3-00014-gb78f8677cde8 (Feb 28 2025 - 17:52:30 +0800)</p>
+</code>``
+<p>可以看到，u-boot也成功启动了。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #111</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto] Authentication method based on ISO/IEC 9798 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto] Authentication method based on ISO/IEC 9798</h1>
+    <p class="date">2025-02-07</p>
+    <div class="labels"><span class="label">Crypto</span> </div>
+    <hr>
+    <div class="content">
+<h1>Overview</h1>
+<p>在实时通信系统中，通信双方的身份认证是非常重要的一环，认证的方式也根据通信双方的具体应用场景和安全原则的不同有所区别，但是主要还是分为单向认证或者双向认证两种方法。认证的目的在于确认对方是否真的就是它所声称的角色，也就是主要用于防止通信仿冒。</p>
+<p>业界比较认可的认证协议主要是ISO/IEC 9798的一些列协议，这些协议里介绍了多种认证方法，以适配与不同的应用场景。对于一个认证场景，主要考虑以下几种目的：</p>
+<li>重放攻击防护</li>
+<li>反射攻击防护</li>
+<li>强制延迟攻击防护</li>
+<li>单方/多方认证</li>
+<li>是否使用预建立秘密或者有可信的第三方来帮助建立共享秘密</li>
+<p>认证机制主要依赖于认证场景，认证场景不同，认证机制模型也随之变化，下面我们来看看常见的认证模型：</p>
+<h1>Unilateral authentication</h1>
+<p>在单向认证场景中，通信双方分别是请求方Alice和认证方Bob，也就是说只有Bob认证Alice的身份，Alice不需要认证Bob的身份。单向认证存在两种认证方式：单步认证和两步认证。</p>
+<h2>One pass authentication</h2>
+<p>在单步认证模型中，请求方发起认证流程，并发送一个认证token给对方，由对方认证请求方的身份。单步认证模型中，请求方非常容易被仿冒，因此必须包含认证因子，能够表征请求方的唯一身份，因此Token中经常会使用时间戳或者一个序列号。这里不能使用随机值，因为随机值无法抵抗重放攻击。而序列号或者时间戳可以在验证方得到验证。序列号的使用需要参考IEC 9798-1中关于序列号的限制，时间戳也需要。</p>
+<img width="1175" alt="Image" src="https://github.com/user-attachments/assets/f35ad5c1-7eab-4001-97ba-d583984d4736" />
+<p>图中，A作为认证请求方，负责发起认证请求，B作为验证者，验证A的验证请求。认证过程可以分为以下几个步骤：</p>
+<li>A生成认证Token，发送给B</li>
+<li>B在收到认证Token后，B验证认证Token的有效性，同时验证Token里的时间戳或者序列号是否满足要求</li>
+<p>Token的计算如下：</p>
+<p>$$</p>
+<p>Token_{AB} = \binom{T_A}{N_A}||Text_2 ||f_{K_{AB}}(\binom{T_A}{N_A}||B||Text_1)</p>
+<p>$$</p>
+<p>其中 </p>
+<li>$T_A$ 是A产生的随机数， $N_A$是A产生的序列数，</li>
+<li>$\binom{T_A}{N_A}$指的是选择其中之一，</li>
+<li>||表示连接，</li>
+<li>B是可选的，是一个区分B的标识符</li>
+<li>$Text_1$和 $Text_2$是一些参数，可以是通信的一些额外参数，例如A的序列号、B的序列号等</li>
+<h2>Two pass authentication</h2>
+<img width="1200" alt="Image" src="https://github.com/user-attachments/assets/a114ea8a-4160-4bed-a351-2b8d544551b1" />
+<p>两步认证的请求方是A，认证方是B。不同于单步认证，两部认证是由B发起认证流程，然后由A生成认证Token，返回给B，由B认证A的身份。这种场景可能是NFC数字钥匙，NFC卡靠近B后，B读卡器发起认证请求，然后由NFC卡生成认证Token，再返回给读卡器端的控制器进行认证。同时，这个认证过程也可以由A发起，图中没有展示出来，比如A发起请求，然后B触发认证流程，并发放认证数据给A，由A生成认证Token返回给B，最后由B做认证。总的来说，认证的流程可以分为：</p>
+<p>$Token_{AB}$的计算如下：</p>
+<p>$$</p>
+<p>Token_{AB} = Text_3 || f_{K_{AB}}(R_B||B||Text_2) </p>
+<p>$$</p>
+<p>式子中， $Text_3$是A需要额外传递给B的参数；B是一个可选参数，表征B的标识符； $Text_2$也是可选的参数，比如A的序列号、硬件ID等； $R_B$是B产生的随机数。认证过程如下：</p>
+<li>B生成一个随机数，并发送给A，同时， $Text_1$是一个可选参数，如果也需要传递给A</li>
+<li>A在收到 $R_B$后，计算认证 $Token_{AB}$，计算方式如上，并将Token发送给B</li>
+<li>B在收到A的Token后，通过 $f_{K_{AB}}(R_B || B || Text_2)$的逆运算算出 $R_B$，B和 $Text_2$，首先是比较标识符B，如果存在的话，然后对比随机数 $R_B$，只有这两个都正确才是认证通过。</li>
+<h1>Mutual authentication</h1>
+<p>双向认证相比于单向认证，需要认证通信的两个参与方，因此没有任何一方是可信的，必须两者都通过验证才能继续通信，认证过程由一方认证另一方。</p>
+<h2>Two pass authentication</h2>
+<p>双向认证中的两步认证类似于单向认证中的单步认证，认证Token中使用的认证因子只允许序列值或者是时间戳，认证模型如下：</p>
+<img width="722" alt="Image" src="https://github.com/user-attachments/assets/d7f3f712-c141-457a-9e93-c4517d8a6011" />
+<p>在双向认证的两部认证过程中，认证请求方的Token生成方式如下：</p>
+<p>$$</p>
+<p>Token_{AB} = \binom{T_A}{N_A}||Text_2||f_{K_{AB}}(\binom{T_A}{N_A}||B||Text_1) </p>
+<p>$$</p>
+<p>其中， $\binom{T_A}{N_A}$指的是使用A的时间戳或者是A生成的序列值； $Text_2$和 $Text_1$是可选的数；B是B的标识符，也是可选的。</p>
+<p>同理，B的认证请求也是一样的：</p>
+<p>$$</p>
+<p>Token_{BA} = \binom{T_B}{N_B}||Text_4||f_{K_{BA}}(\binom{T_B}{N_B}||A||Text_3)</p>
+<p>$$</p>
+<p>其中, $\binom{T_B}{N_A}$是由B生成的时间戳或者序列值， $Text_4$和 $Text_3$是可选的参数；A是A的标识符，也是可选的。</p>
+<p>认证的过程可以分为以下几个步骤：</p>
+<li>A发起请求，同时按照上述式子生成A的认证Token，发送给B</li>
+<li>B收到后首先验证B是否是自己的标识符，如果是，通过 $f_{K_{AB}}(\binom{T_A}{N_A} ||B||Text_1)$的逆运算算出 $T_A$或者 $N_A$，并校验是否可信，如果不可信则不回复任何消息，认证结束</li>
+<li>B认证了A的身份后，以同样的方式生成认证Token，并发送给A</li>
+<li>A以同样的方式认证B</li>
+<p>这里 $K_{AB}$ 和 $K_{BA}$取决于使用的算法，可能相同（对称加密算法），也可能不同（非对称加密算法)</p>
+<h2>Three pass authentication</h2>
+<p>在三步认证机制中，使用的是随机数而不是时间戳或者序列值。三步认证模型的认证过程如下所示：</p>
+<img width="725" alt="Image" src="https://github.com/user-attachments/assets/91823511-2c32-4c29-901d-a1fa0378c239" />
+<p>其中，Token的计算如下所示：</p>
+<p>$$</p>
+<p>Token_{AB} = R_A||Text_3||f_{K_{AB}}(R_A||R_B||B||Text_2)</p>
+<p>$$</p>
+<p>$$</p>
+<p>Token_{BA} = Text_5 || f_{K_{BA}}(R_B || R_A ||Text_4)</p>
+<p>$$</p>
+<p>在 $Token_{AB}$中 $R_A$是由A生成的随机数，用来再认证B的身份， $R_B$是B生成的随机数，用来校验A的身份，B是可选的B的标识符， $Text_3$和 $Text_2$是可选的参数，同理 $Token_{BA}$。认证流程如下：</p>
+<li>B生成随机数 $R_B$，然后发送给A，同时可以选择再发送参数 $Text_2$</li>
+<li>A生成随机数 $R_A$，并按照上述公式生成 $Token_{AB}$发送给B</li>
+<li>在收到A的消息并获得$Token_{AB}$后，通过逆运算或者相同方式计算  $f_{K_{AB}}(R_A||R_B||B||Text_2)$，和收到的进行比较，如果B存在的话验证B，然后是随机数 $R_B$，只有验证通过才会继续下面的认证过程</li>
+<li>B计算 $Token_{BA}$并发送给A</li>
+<li>A在收到 $Token_{BA}$后，通过 $f_{K_{BA}}(R_B || R_A || Text_4)$逆运算计算并和收到的值对比，比较 $R_B$是否一致，从而得出验证过程是否可信。</li>
+<h1>加密算法</h1>
+<p>如果是对称加密算法，那么通信双方具有相同的密钥，因此 $f$就是一个对称密钥算法，通信双方使用的是同一个函数去验证和加密；如果是非对称算法，例如是PKI认证，携带的是证书，那么请求方使用的是私钥签名，发送的Token中携带了证书，由验证方验证证书，证书有效后通过证书的公钥去验证Token。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #105</p>
+    </footer>
+</body>
+</html>

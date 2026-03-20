@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[C/C++] lambda函数原理初探 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[C/C++] lambda函数原理初探</h1>
+    <p class="date">2024-08-05</p>
+    <div class="labels"></div>
+    <hr>
+    <div class="content">
+<p>在函数式编程中，lambda可以说是功能非常强大。举个例子，我们有一个数组，里面包含了某次购物时物品的价格，我们希望在结账时对这些价格进行求和，得出总共的价格，那么一开始的实现可能是这样的：</p>
+<p>``<code>C++</p>
+<p>double printPrice(const std::vector<double>& prices) {</p>
+<p>    double sum = 0;</p>
+<p>    for (auto d: prices) {</p>
+<p>         sum += d;</p>
+<p>    }</p>
+<p>    return sum;</p>
+<p>}</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #61</p>
+    </footer>
+</body>
+</html>

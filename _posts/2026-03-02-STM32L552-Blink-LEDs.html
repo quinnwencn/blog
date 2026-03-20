@@ -27,12 +27,12 @@
     <div class="content">
 <p>这是这个教程的第一篇。写这个教程的目的是为了记录从基础开始，慢慢学习了解arm的trustzone-M，也希望能记录下自己的学习路程。这个学习过程基于STM32L552ZET6Q，使用ST公司提供的STM32CubeMX、STM32CubeIDE和STM32CubeProgramer进行开发。第一个工程就是嵌入式最基础的点亮LED。</p>
 <h1>使用STM32CubeMX生成代码</h1>
-<p>1. 使用STM32CubeMX选择目标芯片</p>
+<li>使用STM32CubeMX选择目标芯片</li>
 <img width="1085" height="889" alt="Image" src="https://github.com/user-attachments/assets/9ca5571d-a8cc-4a58-b059-4230a366f73f" />
 <img width="1363" height="913" alt="Image" src="https://github.com/user-attachments/assets/7c996a6a-2b81-462f-a8fa-a358e5c622bd" />
 <p>在选择芯片后，会弹窗提示我们是否启用TrustZone，这是ARM-v8M芯片所支持的特性，在基础工程阶段，我们暂不启用，勾选<code>without TrustZone activated</code>:</p>
 <img width="287" height="163" alt="Image" src="https://github.com/user-attachments/assets/c6e19a6f-3d5d-4b12-ac75-979e01aeffcd" />
-<p>2. 配置工程和LED引脚</p>
+<li>配置工程和LED引脚</li>
 <p>2.1 配置工程名和存储路径，IDE：</p>
 <img width="1864" height="939" alt="Image" src="https://github.com/user-attachments/assets/62d7c5f8-3559-4bdb-871c-8eb0f17ef006" />
 <p>2.2 配置代码生成风格（可选）</p>
@@ -60,7 +60,7 @@
 <p>* Maximum output speed: STM32的GPIO配置参数，控制电平转换速度</p>
 <p>* User Label：对配置的GPIO的别名</p>
 <p>我们配置好之后，就可以点击右上角的<code>GENERATE CODE</code>生成代码了。</p>
-<p>3. 生成的代码</p>
+<li>生成的代码</li>
 <p>生成的代码主要包括gpio.h, gpio.c和main.c， 以及STM32的库代码：</p>
 <img width="384" height="485" alt="Image" src="https://github.com/user-attachments/assets/c19b5059-16c6-45a6-bc17-e0f91fde4d87" />
 <p>main.c：</p>

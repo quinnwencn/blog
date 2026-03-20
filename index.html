@@ -5,80 +5,493 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quinn's Blog</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            color: #333;
-        }
-        header {
-            border-bottom: 1px solid #eee;
-            padding-bottom: 20px;
-            margin-bottom: 40px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; }
+        header { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 40px; }
         h1 { color: #24292e; }
+        h2 { color: #24292e; border-bottom: 2px solid #0366d6; padding-bottom: 10px; margin-top: 40px; }
+        h4 { margin: 10px 0 5px 0; }
         a { color: #0366d6; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .post { margin-bottom: 30px; }
-        .post-date { color: #6a737d; font-size: 0.9em; }
-        footer { border-top: 1px solid #eee; padding-top: 20px; margin-top: 40px; color: #6a737d; }
+        .post-item { background: #f9f9f9; padding: 15px; margin-bottom: 15px; border-radius: 8px; }
+        .post-date { color: #6a737d; font-size: 0.85em; margin: 0; }
+        .label { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.7em; margin-right: 3px; background: #e1e4e8; color: #333; }
+        footer { border-top: 1px solid #eee; padding-top: 20px; margin-top: 40px; color: #6a737d; text-align: center; }
+        .category { margin-bottom: 30px; }
     </style>
 </head>
 <body>
     <header>
         <h1>Quinn's Blog</h1>
-        <p>A personal blog about technology, programming, and learning.</p>
+        <p>A personal blog about technology, programming, and embedded systems.</p>
+        <p>Total posts: 100</p>
     </header>
 
     <main>
-        <section>
-            <h2>Welcome!</h2>
-            <p>Hello! I'm Quinn, and this is my personal blog.</p>
-        </section>
 
-        <section>
-            <h2>Recent Posts</h2>
-            <div class="posts">
-        <div class="post">
-            <h3><a href="_posts/2026-03-02-STM32L552-Blink-LEDs.html">[STM32L552] Blink LEDs</a></h3>
-            <p class="post-date">2026-03-02</p>
-            <div class="labels"><span class="label">TrustZone</span> <span class="label">ARMv8</span> <span class="label">STM32</span> </div>
-        </div>
-        <div class="post">
-            <h3><a href="_posts/2026-01-02-AI-info-基于Qwen配置使用claude-code.html">[AI info] 基于Qwen配置使用claude code</a></h3>
-            <p class="post-date">2026-01-02</p>
-            <div class="labels"><span class="label">AI</span> </div>
-        </div>
-        <div class="post">
-            <h3><a href="_posts/2025-12-03-Ubuntu-Create-a-deb-package-in-Ubuntu.html">[Ubuntu] Create a deb package in Ubuntu</a></h3>
-            <p class="post-date">2025-12-03</p>
-            <div class="labels"></div>
-        </div>
-        <div class="post">
-            <h3><a href="_posts/2025-11-13-C-Thread-race-condition-problem.html">[C++] Thread race condition problem</a></h3>
-            <p class="post-date">2025-11-13</p>
-            <div class="labels"><span class="label">bug</span> </div>
-        </div>
-        <div class="post">
-            <h3><a href="_posts/2025-11-07-Android-Compile-A-C-project-using-NDK.html">[Android] Compile A C++ project using NDK</a></h3>
-            <p class="post-date">2025-11-07</p>
-            <div class="labels"><span class="label">Android</span> </div>
-        </div>
+        <section class="category">
+            <h2>TrustZone & TEE</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2026-03-02-STM32L552-Blink-LEDs.html">[STM32L552] Blink LEDs</a></h4>
+                <p class="post-date">2026-03-02</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-06-30-Windows-DEV-Build-a-x86-libraryapplication-on-X86_64-platform.html">[Windows DEV] Build a x86 library/application on X86_64 platform</a></h4>
+                <p class="post-date">2025-06-30</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-03-05-06-编写一个基于TEE的Rust版本加减乘除计算器.html">06 编写一个基于TEE的Rust版本加减乘除计算器</a></h4>
+                <p class="post-date">2025-03-05</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-03-04-05-编写一个基于TACA的C语言版本加减乘除工具.html">05 编写一个基于TA/CA的C语言版本加减乘除工具</a></h4>
+                <p class="post-date">2025-03-04</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-28-04-基于qemu搭建op-tee运行环境.html">04 基于qemu搭建op-tee运行环境</a></h4>
+                <p class="post-date">2025-02-28</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-28-03-ATFArm-Trusted-Firmware介绍和仿真.html">03 ATF(Arm Trusted Firmware)介绍和仿真</a></h4>
+                <p class="post-date">2025-02-28</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-16-Layerscape-Boot-flow-of-ls1043ardb.html">[Layerscape] Boot flow of ls1043ardb</a></h4>
+                <p class="post-date">2024-12-16</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-11-28-BugRecord-Token-invalid-after-upgrade-rootfs.html">[BugRecord] Token invalid after upgrade rootfs</a></h4>
+                <p class="post-date">2024-11-28</p>
+            </div>
             </div>
         </section>
 
-        <section>
-            <h2>Pages</h2>
-            <ul>
-                <li><a href="about.html">About</a></li>
-            </ul>
+        <section class="category">
+            <h2>Cryptography</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-07-Crypto-Authentication-method-based-on-ISOIEC-9798.html">[Crypto] Authentication method based on ISO/IEC 9798</a></h4>
+                <p class="post-date">2025-02-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-15-Crypto-椭圆曲线加密原理.html">[Crypto] 椭圆曲线加密原理</a></h4>
+                <p class="post-date">2025-01-15</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-15-Crypto-RSA加密原理.html">[Crypto] RSA加密原理</a></h4>
+                <p class="post-date">2025-01-15</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-15-Crypto-AES加密原理.html">[Crypto] AES加密原理</a></h4>
+                <p class="post-date">2025-01-15</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-17-Crypto-Warmming-up-with-MACsec.html">[Crypto] Warmming up with MACsec</a></h4>
+                <p class="post-date">2024-12-17</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-12-SecOC-Warmming-up-with-SecOC.html">[SecOC] Warmming up with SecOC</a></h4>
+                <p class="post-date">2024-12-12</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-02-Crypto-An-authentication-proposal-for-Tier-1.html">[Crypto] An authentication proposal for Tier 1</a></h4>
+                <p class="post-date">2024-12-02</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-22-Crypto-PKCS11中slot和token的理解.html">[Crypto] PKCS11中slot和token的理解</a></h4>
+                <p class="post-date">2024-06-22</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-18-Crypto安全刷写.html">[Crypto]安全刷写</a></h4>
+                <p class="post-date">2024-06-18</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-13-Crypto-OAuth20-原理初探.html">[Crypto] OAuth2.0 原理初探</a></h4>
+                <p class="post-date">2024-06-13</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-11-RustLearningCrypto-Diffie-Hellman算法.html">[RustLearning][Crypto] Diffie-Hellman算法</a></h4>
+                <p class="post-date">2024-06-11</p>
+            </div>
+            </div>
         </section>
+
+        <section class="category">
+            <h2>C++ & STL</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2025-04-15-缓存一致性分析.html">缓存一致性分析</a></h4>
+                <p class="post-date">2025-04-15</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-10-STL-Source-Code-Analysis-of-shared_ptr.html">[STL] Source Code Analysis of shared_ptr</a></h4>
+                <p class="post-date">2025-02-10</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-10-STLC-Memory-Models.html">[STL/C++] Memory Models</a></h4>
+                <p class="post-date">2025-02-10</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-10-STL-Source-Code-Analysis-of-hash_mapunordered_map.html">[STL] Source Code Analysis of hash_map/unordered_map</a></h4>
+                <p class="post-date">2025-02-10</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-10-STL-Source-Code-Analysis-of-hash_setunordered_set.html">[STL] Source Code Analysis of hash_set/unordered_set</a></h4>
+                <p class="post-date">2025-02-10</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-08-STL-Source-Code-Analysis-of-hashtable.html">[STL] Source Code Analysis of hashtable</a></h4>
+                <p class="post-date">2025-02-08</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-07-STL-Source-Code-Analysis-of-map.html">[STL] Source Code Analysis of map</a></h4>
+                <p class="post-date">2025-02-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-07-STL-Source-Code-Analysis-of-multiset.html">[STL] Source Code Analysis of multiset</a></h4>
+                <p class="post-date">2025-02-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-02-07-STL-Source-Code-Analysis-of-set.html">[STL] Source Code Analysis of set</a></h4>
+                <p class="post-date">2025-02-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-23-STL-Source-Code-Analysis-of-RB-Tree.html">[STL] Source Code Analysis of RB-Tree</a></h4>
+                <p class="post-date">2025-01-23</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-11-STL-Warming-up-with-binary-tree.html">[STL] Warming up with binary tree</a></h4>
+                <p class="post-date">2025-01-11</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-06-STL-Source-Code-Analysis-of-priority_heap.html">[STL] Source Code Analysis of priority_heap</a></h4>
+                <p class="post-date">2025-01-06</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-05-STL-Source-Code-Analysis-of-queue.html">[STL] Source Code Analysis of queue</a></h4>
+                <p class="post-date">2025-01-05</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-05-STL-Source-Code-Analysis-of-stack.html">[STL] Source Code Analysis of stack</a></h4>
+                <p class="post-date">2025-01-05</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-05-STL-Source-Code-Analysis-of-deque.html">[STL] Source Code Analysis of deque</a></h4>
+                <p class="post-date">2025-01-05</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-04-STL-Source-Code-Analysis-of-list.html">[STL] Source Code Analysis of list</a></h4>
+                <p class="post-date">2025-01-04</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-01-02-STL-Source-Code-Analysis-of-vector.html">[STL] Source Code Analysis of vector</a></h4>
+                <p class="post-date">2025-01-02</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-31-STL-iterators.html">[STL] iterators</a></h4>
+                <p class="post-date">2024-12-31</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-30-STL-Source-code-analysis-of-SGIs-alloc.html">[STL] Source code analysis of SGI's alloc</a></h4>
+                <p class="post-date">2024-12-30</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Rust</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-09-RustLearning-Vec的使用.html">[RustLearning] Vec的使用</a></h4>
+                <p class="post-date">2024-06-09</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-06-RustLearning-match的使用.html">[RustLearning] match的使用</a></h4>
+                <p class="post-date">2024-06-06</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-05-TrustedService-Low-Level-Design-of-KMS.html">[TrustedService] Low Level Design of KMS</a></h4>
+                <p class="post-date">2024-06-05</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-03-TrustedService-High-Level-Design-of-KMS.html">[TrustedService] High Level Design of KMS</a></h4>
+                <p class="post-date">2024-06-03</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-01-RustLearning-iterator的使用.html">[RustLearning] iterator的使用</a></h4>
+                <p class="post-date">2024-06-01</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-05-28-RustLearning-文件IO操作.html">[RustLearning] 文件IO操作</a></h4>
+                <p class="post-date">2024-05-28</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-05-28-RustLearning-Slice的使用.html">[RustLearning] Slice的使用</a></h4>
+                <p class="post-date">2024-05-28</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-05-28-RustLearning-宏的定義和使用.html">[RustLearning] 宏的定義和使用</a></h4>
+                <p class="post-date">2024-05-28</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Yocto & Embedded</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2024-11-27-BugRecord-S32g274-repo-sync-failed.html">[BugRecord] S32g274 repo sync failed</a></h4>
+                <p class="post-date">2024-11-27</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-09-14-tips-Yocto定位某个包的依赖者.html">[tips] Yocto定位某个包的依赖者</a></h4>
+                <p class="post-date">2024-09-14</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-08-10-YoctoBugRecord-do_package_qa-QA-Issue-package-xxx-contains-bad-RPATH.html">[Yocto][BugRecord] do_package_qa: QA Issue: package xxx contains bad RPATH</a></h4>
+                <p class="post-date">2024-08-10</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-15-bugRecordyocto-undefined-reference-to-__init_array_end.html">[bugRecord][yocto]  undefined reference to `__init_array_end'</a></h4>
+                <p class="post-date">2024-07-15</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-13-Yocto-update-submodule-url-of-package.html">[Yocto] update submodule url of package</a></h4>
+                <p class="post-date">2024-07-13</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-11-yocto-Add-security-flags-to-your-target.html">[yocto] Add security flags to your target</a></h4>
+                <p class="post-date">2024-07-11</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-08-BugRecord-error-unknown-target-install-in-openwrt-build.html">[BugRecord] error: unknown target 'install' in openwrt build</a></h4>
+                <p class="post-date">2024-07-08</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-07-BugRecord-When-reparsing-xxx-the-basehash-value-changed-from-xxx-to-xxx.html">[BugRecord] When reparsing xxx, the basehash value changed from xxx to xxx....</a></h4>
+                <p class="post-date">2024-07-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-02-BugRecord-yocto编译报错Replace-deprecated-git-branch-parameter---set-upstream-to---set-upstream-to.html">[BugRecord] yocto编译报错Replace deprecated git branch parameter "--set-upstream" to "--set-upstream-to"</a></h4>
+                <p class="post-date">2024-07-02</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-04-26-01-Build-BSP-for-S32G274AEVB.html">01 Build BSP for S32G274AEVB</a></h4>
+                <p class="post-date">2024-04-26</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Automotive</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-20-OTA-Uptane升级规范.html">[OTA] Uptane升级规范</a></h4>
+                <p class="post-date">2024-12-20</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-11-27-ECU-Keys-and-Certificates-Management.html">[ECU] Keys and Certificates Management</a></h4>
+                <p class="post-date">2024-11-27</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-18-SecureBoot-Boot-flow-of-MCU.html">[SecureBoot] Boot flow of MCU</a></h4>
+                <p class="post-date">2024-06-18</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Linux & System</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2025-11-07-WSL-enable-ssh-access-from-another-PC-on-WSL.html">[WSL] enable ssh access from another PC on WSL</a></h4>
+                <p class="post-date">2025-11-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-11-04-Linux-Using-systemd-to-manage-tasks.html">[Linux] Using systemd to manage tasks</a></h4>
+                <p class="post-date">2025-11-04</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-08-14-Workaround-只读rootfs设置DNS服务器.html">[Workaround] 只读rootfs设置DNS服务器</a></h4>
+                <p class="post-date">2025-08-14</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-05-22-Tips-VMware安装Arch-Linux虚拟机.html">[Tips] VMware安装Arch Linux虚拟机</a></h4>
+                <p class="post-date">2025-05-22</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-30-glibc-malloc内存分配管理.html">[glibc] malloc内存分配管理</a></h4>
+                <p class="post-date">2024-12-30</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-04-Tips-Setup-static-IP-address-for-Ethernet-interface-in-Linux.html">[Tips] Setup static IP address for Ethernet interface in Linux</a></h4>
+                <p class="post-date">2024-12-04</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-11-26-BugRecord-Kernel-build-failed-linuxnetfilterxt_connmarkh-not-found.html">[BugRecord] Kernel build failed: linux/netfilter/xt_connmark.h not found</a></h4>
+                <p class="post-date">2024-11-26</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-11-13-BugRecord-systemd-管理的系统-etcprofile未生效.html">[BugRecord] systemd 管理的系统 /etc/profile未生效</a></h4>
+                <p class="post-date">2024-11-13</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-11-05-linuxdriver-Disable-USB-keyboard-using-ko.html">[linux][driver] Disable USB keyboard using ko</a></h4>
+                <p class="post-date">2024-11-05</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Tools & Tips</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2025-12-03-Ubuntu-Create-a-deb-package-in-Ubuntu.html">[Ubuntu] Create a deb package in Ubuntu</a></h4>
+                <p class="post-date">2025-12-03</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-09-09-Tips-远程控制安卓手机的方法.html">[Tips] 远程控制安卓手机的方法</a></h4>
+                <p class="post-date">2025-09-09</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-07-29-Tips-Create-Packages-for-conan-managed-projects.html">[Tips] Create Packages for conan managed projects</a></h4>
+                <p class="post-date">2025-07-29</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-07-27-Tips-Cross-compile-using-conan.html">[Tips] Cross compile using conan</a></h4>
+                <p class="post-date">2025-07-27</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-05-03-C-Windows上CMake编译Qt应用.html">[C++] Windows上CMake编译Qt应用</a></h4>
+                <p class="post-date">2025-05-03</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-12-11-Tips-How-to-build-a-deb-package-for-Debian-system.html">[Tips] How to build a deb package for Debian system</a></h4>
+                <p class="post-date">2024-12-11</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-09-20-tips-日志记录sudo操作.html">[tips] 日志记录sudo操作</a></h4>
+                <p class="post-date">2024-09-20</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-09-09-tips-CMake安装和卸载包.html">[tips] CMake安装和卸载包</a></h4>
+                <p class="post-date">2024-09-09</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-09-09-tips-CMake安装和卸载包.html">[tips] CMake安装和卸载包</a></h4>
+                <p class="post-date">2024-09-09</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-09-06-tips-ubuntu安装bazel.html">[tips] ubuntu安装bazel</a></h4>
+                <p class="post-date">2024-09-06</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-08-23-tips-安装自签名证书.html"> [tips] 安装自签名证书</a></h4>
+                <p class="post-date">2024-08-23</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-08-16-docker-docker设置代理.html">[docker] docker设置代理</a></h4>
+                <p class="post-date">2024-08-16</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-08-11-python-Install-python39-on-ubuntu1604.html">[python] Install python3.9 on ubuntu16.04</a></h4>
+                <p class="post-date">2024-08-11</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-27-CCtips-可变参数宏与可变参数函数结合.html">[C/C++][tips] 可变参数宏与可变参数函数结合</a></h4>
+                <p class="post-date">2024-07-27</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-06-tips-执行与terminal会话无关的命令.html">[tips] 执行与terminal会话无关的命令</a></h4>
+                <p class="post-date">2024-07-06</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-04-tips-ssh反向隧道连接内网.html">[tips] ssh反向隧道连接内网</a></h4>
+                <p class="post-date">2024-07-04</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-30-BugRecord-VMWARE的Ubuntu虚拟机无法自动mount共享文件夹.html">[BugRecord] VMWARE的Ubuntu虚拟机无法自动mount共享文件夹</a></h4>
+                <p class="post-date">2024-06-30</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-24-HSM-Install-softhsm-on-ubuntu.html">[HSM] Install softhsm on ubuntu</a></h4>
+                <p class="post-date">2024-06-24</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-05-15-CMake执行命令.html">CMake执行命令</a></h4>
+                <p class="post-date">2024-05-15</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-05-08-tips-CMake查找依赖包.html">[tips] CMake查找依赖包</a></h4>
+                <p class="post-date">2024-05-08</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Build & Deploy</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2024-05-29-查看交叉編譯的二進制的依賴庫.html">查看交叉編譯的二進制的依賴庫</a></h4>
+                <p class="post-date">2024-05-29</p>
+            </div>
+            </div>
+        </section>
+
+        <section class="category">
+            <h2>Other</h2>
+            <div class="posts-grid">
+            <div class="post-item">
+                <h4><a href="_posts/2026-01-02-AI-info-基于Qwen配置使用claude-code.html">[AI info] 基于Qwen配置使用claude code</a></h4>
+                <p class="post-date">2026-01-02</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-11-13-C-Thread-race-condition-problem.html">[C++] Thread race condition problem</a></h4>
+                <p class="post-date">2025-11-13</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-11-07-Android-Compile-A-C-project-using-NDK.html">[Android] Compile A C++ project using NDK</a></h4>
+                <p class="post-date">2025-11-07</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2025-08-12-Windows-Cpack打包安装包.html">[Windows] Cpack打包安装包</a></h4>
+                <p class="post-date">2025-08-12</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-09-28-HSM-Generate-key-using-softhsm.html">[HSM] Generate key using softhsm</a></h4>
+                <p class="post-date">2024-09-28</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-08-11-python-虚拟环境的建立与使用.html">[python] 虚拟环境的建立与使用</a></h4>
+                <p class="post-date">2024-08-11</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-08-05-CC-lambda函数原理初探.html">[C/C++] lambda函数原理初探</a></h4>
+                <p class="post-date">2024-08-05</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-07-03-git-git-cheatsheet.html">[git] git cheatsheet</a></h4>
+                <p class="post-date">2024-07-03</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-26-boostasio-boost安装.html">[boost.asio] boost安装</a></h4>
+                <p class="post-date">2024-06-26</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-21-BugRecord-交叉编译后执行报错Illegal-Instruction-或者-在main函数前就Segmentation-fault.html">[BugRecord] 交叉编译后执行报错`Illegal Instruction` 或者 在main函数前就`Segmentation fault` </a></h4>
+                <p class="post-date">2024-06-21</p>
+            </div>
+            <div class="post-item">
+                <h4><a href="_posts/2024-06-12-nodejs-so-nodejs调用so库函数.html">[nodejs + so] nodejs调用so库函数</a></h4>
+                <p class="post-date">2024-06-12</p>
+            </div>
+            </div>
+        </section>
+
     </main>
 
     <footer>
-        <p>&copy; 2026 Quinn's Blog. Built with GitHub Pages.</p>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issues</p>
     </footer>
 </body>
 </html>

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of shared_ptr - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of shared_ptr</h1>
+    <p class="date">2025-02-10</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> </div>
+    <hr>
+    <div class="content">
+<p>在没有智能指针之前，C++因为内存管理的问题经常被诟病，一不小心就一个内存泄漏或者乱踩内存，这对于大型项目而言简直就是灾难。C++委员会也意识到了这个问题，在C++11版本中推出了shared_ptr和unique_ptr两种智能指针。unique_ptr是一个独占所有权的只能指针，无法通过拷贝的方式复制，只能通过move转移控制权，unique_ptr智能指针在离开作用域时，会自动析构释放内存，正确使用不会导致内存泄漏问题（不正确使用可能会导致非法访问内存）。shared_ptr是一个内置引用计数，多个shared_ptr可以指向同一个内存，并由shared_ptr管理引用计数，只有当引用计数为0时才会自动释放shared_ptr所指向的内存。</p>
+<h2>shared_ptr的数据结构</h2>
+<img src="https://github.com/user-attachments/assets/52f98d74-7928-4081-be4a-c7e3c41c25c5" alt="Image" style="max-width:100%;">
+<p>shared_ptr的数据结构可以简单用上述的图表示，但是，RefCount block并不是一个单独的成员，而是一片内存，其中不仅存储了引用计数，还有其他对象，我们会在随后的介绍中展开。本文分析的源码来自g++ 9.4.0版本。</p>
+<h2>shared_ptr定义</h2>
+<p>在使用shared_ptr时，我们需要包含memory头文件，但是，shared_ptr并不在memory头文件中，而是通过在memory头文件中<code>#  include <bits/shared_ptr.h></code>的方式引入，shared_ptr的定义就在这个文件中：</p>
+<p>``<code>Cpp</p>
+<p>template<typename _Tp></p>
+<p>    class shared_ptr : public __shared_ptr<_Tp></p>
+<p>    {</p>
+<p>// ...</p>
+<p>constexpr shared_ptr() noexcept : __shared_ptr<_Tp>() { }</p>
+<p>shared_ptr(const shared_ptr&) noexcept = default;</p>
+<p>template<typename _Yp, typename = _Constructible<_Yp*>></p>
+<p>	explicit</p>
+<p>	shared_ptr(_Yp* __p) : __shared_ptr<_Tp>(__p) { }</p>
+<p>template<typename _Yp, typename _Deleter,</p>
+<p>	       typename = _Constructible<_Yp*, _Deleter>></p>
+<p>	shared_ptr(_Yp* __p, _Deleter __d)</p>
+<p>        : __shared_ptr<_Tp>(__p, std::move(__d)) { }</p>
+<p> template<typename _Yp, typename _Deleter, typename _Alloc,</p>
+<p>	       typename = _Constructible<_Yp*, _Deleter, _Alloc>></p>
+<p>	shared_ptr(_Yp* __p, _Deleter __d, _Alloc __a)</p>
+<p>	: __shared_ptr<_Tp>(__p, std::move(__d), std::move(__a)) { }</p>
+<p>// ...</p>
+<p>private:</p>
+<p>      // This constructor is non-standard, it is used by allocate_shared.</p>
+<p>      template<typename _Alloc, typename... _Args></p>
+<p>	shared_ptr(_Sp_alloc_shared_tag<_Alloc> __tag, _Args&&... __args)</p>
+<p>	: __shared_ptr<_Tp>(__tag, std::forward<_Args>(__args)...)</p>
+<p>	{ }</p>
+<p>// ...</p>
+<p>};</p>
+</code>`<code>
+<p>从代码中可以看出，shared_ptr类自身并没有定义实现，而是public继承自__shared_ptr: </code>class shared_ptr : public __shared_ptr<_Tp><code>。</code>__shared_ptr<code>才是最终实现shared_ptr逻辑的类。但是，有几个构造函数需要特别注意：</p>
+<p><em> shared_ptr(_Yp</em> __p)</p>
+<p><em> shared_ptr(_Yp</em> __p, _Deleter __d)</p>
+<p>* shared_ptr(_Sp_alloc_shared_tag<_Alloc> __tag, _Args&&... __args)</p>
+<p>这几个构造函数，决定了底层引用计数所使用的类型，这里先提一个醒，后续展开介绍。我们先看</code>__shared_ptr<code>的实现。</p>
+<h3>__shared_ptr</h3>
+</code>__shared_ptr<code>定义在</code>bits/shared_ptr_base.h<code>中，定义如下：
+</code>`<code>Cpp
+<p>  template<typename _Tp, _Lock_policy _Lp></p>
+<p>    class __shared_ptr</p>
+<p>    : public __shared_ptr_access<_Tp, _Lp> {</p>
+<p>// ...</p>
+<p>explicit</p>
+<p>	__shared_ptr(_Yp* __p)</p>
+<p>	: _M_ptr(__p), _M_refcount(__p, typename is_array<_Tp>::type())</p>
+<p>       {</p>
+<p>	  static_assert( !is_void<_Yp>::value, "incomplete type" );</p>
+<p>	  static_assert( sizeof(_Yp) > 0, "incomplete type" );</p>
+<p>	  _M_enable_shared_from_this_with(__p);</p>
+<p>	}</p>
+<p>      template<typename _Yp, typename _Deleter, typename = _SafeConv<_Yp>></p>
+<p>	__shared_ptr(_Yp* __p, _Deleter __d)</p>
+<p>	: _M_ptr(__p), _M_refcount(__p, std::move(__d))</p>
+<p>	{</p>
+<p>	  static_assert(__is_invocable<_Deleter&, _Yp*&>::value,</p>
+<p>	      "deleter expression d(p) is well-formed");</p>
+<p>	  _M_enable_shared_from_this_with(__p);</p>
+<p>	}</p>
+<p>protected:</p>
+<p>      // This constructor is non-standard, it is used by allocate_shared.</p>
+<p>      template<typename _Alloc, typename... _Args></p>
+<p>	__shared_ptr(_Sp_alloc_shared_tag<_Alloc> __tag, _Args&&... __args)</p>
+<p>	: _M_ptr(), _M_refcount(_M_ptr, __tag, std::forward<_Args>(__args)...)</p>
+<p>	{ _M_enable_shared_from_this_with(_M_ptr); }</p>
+<p>// ...</p>
+<p>    __shared_ptr(const __shared_ptr&) noexcept = default;</p>
+<p>      __shared_ptr& operator=(const __shared_ptr&) noexcept = default;</p>
+<p>      ~__shared_ptr() = default;  // 注意，这里析构函数并没有释放内存，要关注内存是在哪里释放的</p>
+<p>// ...</p>
+<p>      __shared_ptr&</p>
+<p>      operator=(__shared_ptr&& __r) noexcept</p>
+<p>      {</p>
+<p>	__shared_ptr(std::move(__r)).swap(*this);  // 所有的赋值操作都是根据参数构造一个对象后和this swap</p>
+<p>	return *this;</p>
+<p>      }</p>
+<p>      template<class _Yp></p>
+<p>	_Assignable<_Yp></p>
+<p>	operator=(__shared_ptr<_Yp, _Lp>&& __r) noexcept</p>
+<p>	{</p>
+<p>	  __shared_ptr(std::move(__r)).swap(*this);</p>
+<p>	  return *this;</p>
+<p>	}</p>
+<p>      template<typename _Yp, typename _Del></p>
+<p>	_UniqAssignable<_Yp, _Del></p>
+<p>	operator=(unique_ptr<_Yp, _Del>&& __r)</p>
+<p>	{</p>
+<p>	  __shared_ptr(std::move(__r)).swap(*this);</p>
+<p>	  return *this;</p>
+<p>	}</p>
+<p>      void</p>
+<p>      reset() noexcept</p>
+<p>      { __shared_ptr().swap(*this); }</p>
+<p>      template<typename _Yp></p>
+<p>	_SafeConv<_Yp></p>
+<p>	reset(_Yp* __p) // _Yp must be complete.</p>
+<p>	{</p>
+<p>	  // Catch self-reset errors.</p>
+<p>	  __glibcxx_assert(__p == 0 || __p != _M_ptr);</p>
+<p>	  __shared_ptr(__p).swap(*this);</p>
+<p>	}</p>
+<p>      template<typename _Yp, typename _Deleter></p>
+<p>	_SafeConv<_Yp></p>
+<p>	reset(_Yp* __p, _Deleter __d)</p>
+<p>	{ __shared_ptr(__p, std::move(__d)).swap(*this); }</p>
+<p>element_type*</p>
+<p>      get() const noexcept</p>
+<p>      { return _M_ptr; } // 获取裸指针并不会增加计数或者减少计数，但是使用裸指针时需要注意生命周期管理，不建议获取裸指针后赋值给类似的裸指针</p>
+<p>     element_type*	   _M_ptr;         // Contained pointer.  指向实际的对象内存</p>
+<p>      __shared_count<_Lp>  _M_refcount;    // Reference counter.</p>
+<p>};</p>
+</code>`<code>
+<p>由上述源码中可以看出，</code>__shared_ptr<code>也是提供了几种类型的构造函数，上述代码中，我把需要关注的三个类型展示出来了，</code>shared_ptr<code>中也是三个与之对应的构造函数，这三个类型的构造函数，在后面对Reference counter的分析时，才能看出作用。此时能看出的是是否提供deletor以及是否是可变参的而已。</p>
+<p>其他一些需要关注的点，代码中通过注释的方式进行了标注。</p>
+<p>继续关注</code>__shared_ptr<code>的成员：</p>
+<p>* _M_ptr：指向对象的内存，也就是实际使用的指针</p>
+<p>* _M_refcount：引用计数，类型是__shared_count</p>
+<h3>_shared_count</h3>
+</code>`<code>Cpp
+<p>template<_Lock_policy _Lp></p>
+<p>    class __shared_count</p>
+<p>    {</p>
+<p>      template<typename _Tp></p>
+<p>	struct __not_alloc_shared_tag { using type = void; };</p>
+<p>      template<typename _Tp></p>
+<p>	struct __not_alloc_shared_tag<_Sp_alloc_shared_tag<_Tp>> { };</p>
+<p>    public:</p>
+<p>      constexpr __shared_count() noexcept : _M_pi(0)</p>
+<p>      { }</p>
+<p>      template<typename _Ptr></p>
+<p>        explicit</p>
+<p>	__shared_count(_Ptr __p) : _M_pi(0) // 对应__shared_ptr的构造函数</p>
+<p>	{</p>
+<p>	  __try</p>
+<p>	    {</p>
+<p>	      _M_pi = new _Sp_counted_ptr<_Ptr, _Lp>(__p);</p>
+<p>	    }</p>
+<p>	  __catch(...)</p>
+<p>	    {</p>
+<p>	      delete __p;</p>
+<p>	      __throw_exception_again;</p>
+<p>	    }</p>
+<p>	}</p>
+<p>     // ...</p>
+<p>     template<typename _Ptr, typename _Deleter,</p>
+<p>	       typename = typename __not_alloc_shared_tag<_Deleter>::type></p>
+<p>	__shared_count(_Ptr __p, _Deleter __d)  // 对应__shared_ptr的构造函数</p>
+<p>	: __shared_count(__p, std::move(__d), allocator<void>())</p>
+<p>	{ }</p>
+<p>      template<typename _Ptr, typename _Deleter, typename _Alloc,</p>
+<p>	       typename = typename __not_alloc_shared_tag<_Deleter>::type></p>
+<p>	__shared_count(_Ptr __p, _Deleter __d, _Alloc __a) : _M_pi(0)</p>
+<p>	{</p>
+<p>	  typedef _Sp_counted_deleter<_Ptr, _Deleter, _Alloc, _Lp> _Sp_cd_type;</p>
+<p>	  __try</p>
+<p>	    {</p>
+<p>	      typename _Sp_cd_type::__allocator_type __a2(__a);</p>
+<p>	      auto __guard = std::__allocate_guarded(__a2);</p>
+<p>	      _Sp_cd_type* __mem = __guard.get();</p>
+<p>	      ::new (__mem) _Sp_cd_type(__p, std::move(__d), std::move(__a));</p>
+<p>	      _M_pi = __mem;</p>
+<p>	      __guard = nullptr;</p>
+<p>	    }</p>
+<p>	  __catch(...)</p>
+<p>	    {</p>
+<p>	      __d(__p); // Call _Deleter on __p.</p>
+<p>	      __throw_exception_again;</p>
+<p>	    }</p>
+<p>	}</p>
+<p>      template<typename _Tp, typename _Alloc, typename... _Args></p>
+<p>	__shared_count(_Tp*& __p, _Sp_alloc_shared_tag<_Alloc> __a,</p>
+<p>		       _Args&&... __args) // 对应__shared_ptr的构造函数</p>
+<p>	{</p>
+<p>	  typedef _Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp> _Sp_cp_type;</p>
+<p>	  typename _Sp_cp_type::__allocator_type __a2(__a._M_a);</p>
+<p>	  auto __guard = std::__allocate_guarded(__a2);</p>
+<p>	  _Sp_cp_type* __mem = __guard.get();</p>
+<p>	  auto __pi = ::new (__mem)</p>
+<p>	    _Sp_cp_type(__a._M_a, std::forward<_Args>(__args)...);</p>
+<p>	  __guard = nullptr;</p>
+<p>	  _M_pi = __pi;</p>
+<p>	  __p = __pi->_M_ptr();</p>
+<p>	}</p>
+<p>~__shared_count() noexcept</p>
+<p>      {</p>
+<p>	if (_M_pi != nullptr)</p>
+<p>	  _M_pi->_M_release(); // 调用引用计数递减函数</p>
+<p>      }</p>
+<p>// ...</p>
+<p>__shared_count(const __shared_count& __r) noexcept  // 拷贝构造函数，</p>
+<p>      : _M_pi(__r._M_pi) </p>
+<p>      {</p>
+<p>	if (_M_pi != 0) // 这种情况怎么会发生，如果__r不是nullptr， 那么__r._M_pi应该不会是空指针</p>
+<p>	  _M_pi->_M_add_ref_copy();  // 增加计数</p>
+<p>      }</p>
+<p>      __shared_count&</p>
+<p>      operator=(const __shared_count& __r) noexcept  // 拷贝赋值</p>
+<p>      {</p>
+<p>	_Sp_counted_base<_Lp>* __tmp = __r._M_pi;</p>
+<p>	if (__tmp != _M_pi) // 排除 a = a的情</p>
+<p>	  {</p>
+<p>	    if (__tmp != 0)</p>
+<p>	      __tmp->_M_add_ref_copy(); // 先增加右边的指针的计数</p>
+<p>	    if (_M_pi != 0) // 如果是0，就不用减少计数了</p>
+<p>	      _M_pi->_M_release(); // 再减少左边的指针的计数</p>
+<p>	    _M_pi = __tmp;</p>
+<p>	  }</p>
+<p>	return *this;</p>
+<p>      }</p>
+<p>// ...</p>
+<p>private:</p>
+<p>      friend class __weak_count<_Lp>;</p>
+<p>      _Sp_counted_base<_Lp>*  _M_pi; // 只有一个成员</p>
+<p>    };</p>
+</code>`<code>
+</code>__shared_count<code>中的构造函数，也和</code>__shared_ptr<code>中的构造函数对应，因为</code>__shared_ptr<code>最终也需要调用</code>__shared_count<code>的构造函数来构造引用计数成员。</code>__shared_count<code>中的拷贝赋值和拷贝构造函数中， 有对应引用计数的管理，实际上这些引用计数都是_M_pi，也就是</code>_Sp_counted_base<code>提供的功能。
+<p>成员 </code>_M_pi<code> 的类型是</code>_Sp_counted_base<code>，这是一个抽象类，内部有函数是纯虚函数，有三个类继承实现了</code>_Sp_counted_base<code>，它们分别是：</p>
+<p>* _Sp_counted_ptr</p>
+<p>* _Sp_counted_deleter</p>
+<p>* _Sp_counted_ptr_inplace</p>
+<p>他们就是实现</code>shared_ptr<code>引用计数的核心类，接下来将对这四个类单独介绍.</p>
+<h3>引用计数分析</h3>
+<p>####  _Sp_counted_base</p>
+</code>_Sp_counted_base<code> 是一个基类，但是其内部已经包含了引用计数所需的计数器，并且是同时包含了weak_ptr的计数器：
+</code>`<code>Cpp
+<p>  template<_Lock_policy _Lp = __default_lock_policy></p>
+<p>    class _Sp_counted_base</p>
+<p>    : public _Mutex_base<_Lp></p>
+<p>    {</p>
+<p>    public:</p>
+<p>      _Sp_counted_base() noexcept</p>
+<p>      : _M_use_count(1), _M_weak_count(1) { }</p>
+<p>      virtual</p>
+<p>      ~_Sp_counted_base() noexcept</p>
+<p>      { }</p>
+<p>      // Called when _M_use_count drops to zero, to release the resources</p>
+<p>      // managed by *this.</p>
+<p>      virtual void</p>
+<p>      _M_dispose() noexcept = 0; // 纯虚函数，留给实现类定义，当_M_use_count 变成0时调用，释放资源</p>
+<p>      // Called when _M_weak_count drops to zero.</p>
+<p>      virtual void</p>
+<p>      _M_destroy() noexcept // 当_M_weak_count 变成0时释放，这个释放是delete this，需要关注和dispose的区别</p>
+<p>      { delete this; } </p>
+<p>      virtual void*</p>
+<p>      _M_get_deleter(const std::type_info&) noexcept = 0; // 由于可能会自定义删除器，因此这个函数必须是纯虚函数</p>
+<p>      void</p>
+<p>      _M_add_ref_copy()</p>
+<p>      { __gnu_cxx::__atomic_add_dispatch(&_M_use_count, 1); } // 原子操作+1</p>
+<p>      void</p>
+<p>      _M_add_ref_lock(); // 使用锁递增</p>
+<p>      bool</p>
+<p>      _M_add_ref_lock_nothrow();   // 使用锁递增, 不抛异常</p>
+<p>      void</p>
+<p>      _M_release() noexcept // 递减引用计数，可能会释放内存</p>
+<p>      {</p>
+<p>        // Be race-detector-friendly.  For more info see bits/c++config.</p>
+<p>        _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_use_count);</p>
+<p>	if (__gnu_cxx::__exchange_and_add_dispatch(&_M_use_count, -1) == 1) // 如果当前是1，那没必要减了，直接调用dispose释放内存</p>
+<p>	  {</p>
+<p>            _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_use_count);</p>
+<p>	    _M_dispose();</p>
+<p>	    // There must be a memory barrier between dispose() and destroy()</p>
+<p>	    // to ensure that the effects of dispose() are observed in the</p>
+<p>	    // thread that runs destroy().</p>
+<p>	    // See http://gcc.gnu.org/ml/libstdc++/2005-11/msg00136.html</p>
+<p>	    if (_Mutex_base<_Lp>::_S_need_barriers)</p>
+<p>	      {</p>
+<p>		__atomic_thread_fence (__ATOMIC_ACQ_REL);</p>
+<p>	      }</p>
+<p>            // Be race-detector-friendly.  For more info see bits/c++config.</p>
+<p>            _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_weak_count);</p>
+<p>	    if (__gnu_cxx::__exchange_and_add_dispatch(&_M_weak_count,  // weak count也要递减，如果递减后也是0，也要调用destroy摧毁this</p>
+<p>						       -1) == 1)</p>
+<p>              {</p>
+<p>                _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_weak_count);</p>
+<p>	        _M_destroy();</p>
+<p>              }</p>
+<p>	  }</p>
+<p>      }</p>
+<p>      void</p>
+<p>      _M_weak_add_ref() noexcept  // 递减weak 引用计数</p>
+<p>      { __gnu_cxx::__atomic_add_dispatch(&_M_weak_count, 1); }</p>
+<p>      void</p>
+<p>      _M_weak_release() noexcept  // 为什么还有weak 引用计数的release，难道是专门处理weak_ptr的？但这时候不是也会摧毁this了吗？</p>
+<p>      {</p>
+<p>        // Be race-detector-friendly. For more info see bits/c++config.</p>
+<p>        _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_weak_count);</p>
+<p>	if (__gnu_cxx::__exchange_and_add_dispatch(&_M_weak_count, -1) == 1)</p>
+<p>	  {</p>
+<p>            _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_weak_count);</p>
+<p>	    if (_Mutex_base<_Lp>::_S_need_barriers)</p>
+<p>	      {</p>
+<p>	        // See _M_release(),</p>
+<p>	        // destroy() must observe results of dispose()</p>
+<p>		__atomic_thread_fence (__ATOMIC_ACQ_REL);</p>
+<p>	      }</p>
+<p>	    _M_destroy();</p>
+<p>	  }</p>
+<p>      }</p>
+<p>      long</p>
+<p>      _M_get_use_count() const noexcept</p>
+<p>      {</p>
+<p>        // No memory barrier is used here so there is no synchronization</p>
+<p>        // with other threads.</p>
+<p>        return __atomic_load_n(&_M_use_count, __ATOMIC_RELAXED);</p>
+<p>      }</p>
+<p>    private:</p>
+<p>      _Sp_counted_base(_Sp_counted_base const&) = delete;</p>
+<p>      _Sp_counted_base& operator=(_Sp_counted_base const&) = delete;</p>
+<p>      _Atomic_word  _M_use_count;     // #shared</p>
+<p>      _Atomic_word  _M_weak_count;    // #weak + (#shared != 0)</p>
+<p>    };</p>
+</code>`<code>
+</code>_Sp_counted_base<code>中有两个成员，分别是shared_ptr的引用计数和weak_ptr的引用计数，也就是说实际上这两个指针的引用计数使用的是同一个类维护，递增和递减也是由</code>_Sp_counted_base<code>维护，递增和递减都是原子操作。
+<p>类中的模板函数，都会根据锁或者原子操作进行特化或者片特化处理，这里不赘述。</p>
+<p>#### _Sp_counted_ptr</p>
+</code>_Sp_counted_ptr<code> 继承自</code>_Sp_counted_base<code>，目的是托管那些只使用shared_ptr管理内存指针，不自定义deleter或者其他操作的shared_ptr，因此其内部必须有一个指向托管对象内存的指针，我们来看源码：
+</code>`<code>Cpp
+<p>  template<typename _Ptr, _Lock_policy _Lp></p>
+<p>    class _Sp_counted_ptr final : public _Sp_counted_base<_Lp></p>
+<p>    {</p>
+<p>    public:</p>
+<p>      explicit</p>
+<p>      _Sp_counted_ptr(_Ptr __p) noexcept</p>
+<p>      : _M_ptr(__p) { }</p>
+<p>      virtual void</p>
+<p>      _M_dispose() noexcept // dispose的实现是释放指向托管对象内存的指针</p>
+<p>      { delete _M_ptr; }</p>
+<p>      virtual void</p>
+<p>      _M_destroy() noexcept</p>
+<p>      { delete this; } // 这个和base一样，释放自身</p>
+<p>      virtual void*</p>
+<p>      _M_get_deleter(const std::type_info&) noexcept</p>
+<p>      { return nullptr; } // _Sp_counted_ptr 不支持自定义deleter</p>
+<p>      _Sp_counted_ptr(const _Sp_counted_ptr&) = delete;</p>
+<p>      _Sp_counted_ptr& operator=(const _Sp_counted_ptr&) = delete;</p>
+<p>    private:</p>
+<p>      _Ptr             _M_ptr; // 指向托管对象的内存</p>
+<p>    };</p>
+</code>`<code>
+<p>可以看出，</code>_Sp_counted_ptr<code>只是对dispose虚函数和_M_get_deleter进行了实现，然后新增一个指向托管对象内存的指针成员，这个成员也是依赖于</code>_M_dispose<code>释放资源，根据前面的描述，这个函数会在</code>__shared_count<code>析构函数被调用，因此也就释放了。由于</code>_Sp_counted_base<code>是在</code>__shared_count<code>中通过new操作符申请的，因此需要用delete this释放资源。</p>
+<p>##### </code>_Sp_counted_ptr<code>的使用场景</p>
+</code>`<code>Cpp
+<p>auto sptr = std::shared_ptr<Data>(new Data);</p>
+</code>`<code>
+<p>#### _Sp_counted_deleter</p>
+<p>在介绍</code>_Sp_counted_deleter<code>之前，先介绍下空基类的一些知识，因为</code>_Sp_counted_deleter<code>需要使用到空基类。在C++中，任何对象都需要有地址，但是，如果一个类没有任何数据成员，为了确定他的地址，编译器会在实现时，增加1字节的空间，用来占位表示这个变量的地址；而如果这个空类被用作基类（Empty Base Object, EBO)，编译器此时就可以将这个空类的空间改为0，从而优化节省空间。</p>
+</code>`<code>Cpp
+<p>template<int _Nm, typename _Tp,</p>
+<p>	   bool __use_ebo = !__is_final(_Tp) && __is_empty(_Tp)> // 当_Tp不是final类且是空类时，它是EBO，将_Tp视为基类；如果_Tp不是空类，不适用EBO，将_Tp作为成员变量</p>
+<p>  /// Specialization using EBO.</p>
+<p>  template<int _Nm, typename _Tp></p>
+<p>    struct _Sp_ebo_helper<_Nm, _Tp, true> : private _Tp // 当做基类继承，使用private继承</p>
+<p>    {</p>
+<p>      explicit _Sp_ebo_helper(const _Tp& __tp) : _Tp(__tp) { }</p>
+<p>      explicit _Sp_ebo_helper(_Tp&& __tp) : _Tp(std::move(__tp)) { }</p>
+<p>      static _Tp&</p>
+<p>      _S_get(_Sp_ebo_helper& __eboh) { return static_cast<_Tp&>(__eboh); }</p>
+<p>    };</p>
+<p>  /// Specialization not using EBO.</p>
+<p>  template<int _Nm, typename _Tp></p>
+<p>    struct _Sp_ebo_helper<_Nm, _Tp, false></p>
+<p>    {</p>
+<p>      explicit _Sp_ebo_helper(const _Tp& __tp) : _M_tp(__tp) { }  // 当做成员变量</p>
+<p>      explicit _Sp_ebo_helper(_Tp&& __tp) : _M_tp(std::move(__tp)) { }</p>
+<p>      static _Tp&</p>
+<p>      _S_get(_Sp_ebo_helper& __eboh)</p>
+<p>      { return __eboh._M_tp; }</p>
+<p>    private:</p>
+<p>      _Tp _M_tp;</p>
+<p>    };</p>
+</code>`<code>
+<p>在</code>_Sp_counted_deleter<code>中，ebo用上了, 以便优化deleter和allo的存储空间，避免这两个是空类时浪费额外的空间</p>
+</code>`<code>Cpp
+<p>  // Support for custom deleter and/or allocator</p>
+<p>  template<typename _Ptr, typename _Deleter, typename _Alloc, _Lock_policy _Lp></p>
+<p>    class _Sp_counted_deleter final : public _Sp_counted_base<_Lp></p>
+<p>    {</p>
+<p>      class _Impl : _Sp_ebo_helper<0, _Deleter>, _Sp_ebo_helper<1, _Alloc> // 这里就自动根据_Deleter和_Alloc的类型，决定使用ebo还是不适用ebo</p>
+<p>      {</p>
+<p>	typedef _Sp_ebo_helper<0, _Deleter>	_Del_base;</p>
+<p>	typedef _Sp_ebo_helper<1, _Alloc>	_Alloc_base;</p>
+<p>      public:</p>
+<p>	_Impl(_Ptr __p, _Deleter __d, const _Alloc& __a) noexcept</p>
+<p>	: _M_ptr(__p), _Del_base(std::move(__d)), _Alloc_base(__a)</p>
+<p>	{ }</p>
+<p>	_Deleter& _M_del() noexcept { return _Del_base::_S_get(*this); } // 根据是否是ebo决定获取类还是成员，真巧妙啊！</p>
+<p>	_Alloc& _M_alloc() noexcept { return _Alloc_base::_S_get(*this); }</p>
+<p>	_Ptr _M_ptr;  // 托管对象的内存指针</p>
+<p>      };</p>
+<p>    public:</p>
+<p>      using __allocator_type = __alloc_rebind<_Alloc, _Sp_counted_deleter>;</p>
+<p>      // __d(__p) must not throw.</p>
+<p>      _Sp_counted_deleter(_Ptr __p, _Deleter __d) noexcept</p>
+<p>      : _M_impl(__p, std::move(__d), _Alloc()) { }</p>
+<p>      // __d(__p) must not throw.</p>
+<p>      _Sp_counted_deleter(_Ptr __p, _Deleter __d, const _Alloc& __a) noexcept</p>
+<p>      : _M_impl(__p, std::move(__d), __a) { }</p>
+<p>      ~_Sp_counted_deleter() noexcept { } // 没有释放任何内存，因为没有申请内存</p>
+<p>      virtual void</p>
+<p>      _M_dispose() noexcept</p>
+<p>      { _M_impl._M_del()(_M_impl._M_ptr); }  // 由于托管对象的指针放到了impl中，因此dispose时，就需要使用impl保存的deleter来释放impl的_M_ptr</p>
+<p>      virtual void</p>
+<p>      _M_destroy() noexcept</p>
+<p>      {</p>
+<p>	__allocator_type __a(_M_impl._M_alloc());</p>
+<p>	__allocated_ptr<__allocator_type> __guard_ptr{ __a, this };</p>
+<p>	this->~_Sp_counted_deleter();  // 这里释放的时候，实际上没有释放内存，因为_Sp_counted_deleter的this指针实际上是栈上数据，但是因为impl._M_ptr是对上数据，因此需要在dispose时释放，这个非常巧妙</p>
+<p>      }</p>
+<p>      virtual void*</p>
+<p>      _M_get_deleter(const std::type_info& __ti) noexcept</p>
+<p>      {</p>
+<p>#if __cpp_rtti</p>
+<p>	// _GLIBCXX_RESOLVE_LIB_DEFECTS</p>
+<p>	// 2400. shared_ptr's get_deleter() should use addressof()</p>
+<p>        return __ti == typeid(_Deleter)</p>
+<p>	  ? std::__addressof(_M_impl._M_del())</p>
+<p>	  : nullptr; // 返回的是deleter的地址，如果是ebo，那么就是impl的地址里的deleter，否则就是变量的地址，真是巧妙啊</p>
+<p>#else</p>
+<p>        return nullptr;</p>
+<p>#endif</p>
+<p>      }</p>
+<p>    private:</p>
+<p>      _Impl _M_impl;</p>
+<p>    };</p>
+</code>`<code>
+</code>_Sp_counted_deleter<code>首先使用EBO的概念，将deleter和alloc的存储空间优化了，尽可能地减少对内存的使用，实现起来就是基于一个Impl类托管_M_ptr，继承自deleter和alloc，从而使用了EBO的技术。
+</code>_Sp_counted_deleter<code>也实现了dispose和destroy，dispose只是根据</code>_Sp_counted_deleter<code>释放的是impl._M_ptr，没有什么特别的，比较有意思的是destroy。destroy的实现单独拿出来看：
+</code>`<code>Cpp
+<p>      virtual void</p>
+<p>      _M_destroy() noexcept</p>
+<p>      {</p>
+<p>	__allocator_type __a(_M_impl._M_alloc()); // 从impl中获取分配器 </p>
+<p>	__allocated_ptr<__allocator_type> __guard_ptr{ __a, this }; // 然后构造一个__alloc_rebind类型的__allocated_ptr，__allocated_ptr会在析构时，如果第二个指针参数不为空，就调用deallocate释放</p>
+<p>	this->~_Sp_counted_deleter(); // 释放资源</p>
+<p>      }</p>
+</code>`<code>
+<p>归结起来就是：</p>
+<p>* 获取分配器：</p>
+<p>    * __allocator_type __a(_M_impl._M_alloc()); 从 _Impl 中获取存储的自定义分配器。</p>
+<p>    * __allocator_type 是通过 __alloc_rebind 定义的，确保分配器可以用于分配 _Sp_counted_deleter 类型的内存。</p>
+<p>* 使用 __allocated_ptr 管理内存：</p>
+<p>    * __allocated_ptr<__allocator_type> __guard_ptr{ __a, this }; 创建了一个 __allocated_ptr 对象，用于管理 _Sp_counted_deleter 的内存。</p>
+<p>    * __allocated_ptr 是一个 RAII 包装器，确保在析构时正确地释放内存。</p>
+<p>* 调用析构函数：</p>
+<p>    * this->~_Sp_counted_deleter(); 显式调用 _Sp_counted_deleter 的析构函数，销毁对象。</p>
+<p>我们来看</code>__shared_count<code>中，</code>_Sp_counted_deleter<code>是如何申请内存的：</p>
+</code>`<code>Cpp
+<p>template<typename _Ptr, typename _Deleter, typename _Alloc,</p>
+<p>	       typename = typename __not_alloc_shared_tag<_Deleter>::type></p>
+<p>	__shared_count(_Ptr __p, _Deleter __d, _Alloc __a) : _M_pi(0)</p>
+<p>	{</p>
+<p>	  typedef _Sp_counted_deleter<_Ptr, _Deleter, _Alloc, _Lp> _Sp_cd_type;</p>
+<p>	  __try</p>
+<p>	    {</p>
+<p>	      typename _Sp_cd_type::__allocator_type __a2(__a); // 创建新的内存分配器</p>
+<p>	      auto __guard = std::__allocate_guarded(__a2); // 这里就申请内存了</p>
+<p>	      _Sp_cd_type* __mem = __guard.get(); // 获取申请的内存</p>
+<p>	      ::new (__mem) _Sp_cd_type(__p, std::move(__d), std::move(__a)); // 在申请的内存上使用placement new构造_Sp_counted_deleter</p>
+<p>	      _M_pi = __mem;</p>
+<p>	      __guard = nullptr;</p>
+<p>	    }</p>
+<p>	  __catch(...)</p>
+<p>	    {</p>
+<p>	      __d(__p); // Call _Deleter on __p.</p>
+<p>	      __throw_exception_again;</p>
+<p>	    }</p>
+<p>	}</p>
+</code>`<code>
+<p>为了申请和释放一致，因此在destroy中也是用同样的方式，由__allocated_ptr来释放_Sp_counted_deleter的内存。</p>
+<p>##### _Sp_counted_deleter的使用场景</p>
+</code>`<code>Cpp
+<p>void delData* data) { delete data; }</p>
+<p>std::shared_ptr<Data>(new Data, del);</p>
+</code>`<code>
+<p>#### </code>_Sp_counted_ptr_inplace<code></p>
+</code>_Sp_counted_ptr_inplace<code>和其他两个相比，内存申请时引用计数和托管的对象内存是同时申请的，因此具有更高的效率，主要用于make_shared场景， 源码如下：
+</code>`<code>Cpp
+<p>template<typename _Tp, typename _Alloc, _Lock_policy _Lp></p>
+<p>    class _Sp_counted_ptr_inplace final : public _Sp_counted_base<_Lp></p>
+<p>    {</p>
+<p>      class _Impl : _Sp_ebo_helper<0, _Alloc>  // 同样是使用EBO技术，试图节省内存</p>
+<p>      {</p>
+<p>	typedef _Sp_ebo_helper<0, _Alloc>	_A_base; </p>
+<p>      public:</p>
+<p>	explicit _Impl(_Alloc __a) noexcept : _A_base(__a) { }</p>
+<p>	_Alloc& _M_alloc() noexcept { return _A_base::_S_get(*this); }</p>
+<p>	__gnu_cxx::__aligned_buffer<_Tp> _M_storage;  // 对其托管对象的内存缓冲区，用来申请引用计数以及托管对象的内存</p>
+<p>      };</p>
+<p>    public:</p>
+<p>      using __allocator_type = __alloc_rebind<_Alloc, _Sp_counted_ptr_inplace>;</p>
+<p>      // Alloc parameter is not a reference so doesn't alias anything in __args</p>
+<p>      template<typename... _Args></p>
+<p>	_Sp_counted_ptr_inplace(_Alloc __a, _Args&&... __args)</p>
+<p>	: _M_impl(__a)</p>
+<p>	{</p>
+<p>	  // _GLIBCXX_RESOLVE_LIB_DEFECTS</p>
+<p>	  // 2070.  allocate_shared should use allocator_traits<A>::construct</p>
+<p>	  allocator_traits<_Alloc>::construct(__a, _M_ptr(),  // 对申请好的内存就地构造</p>
+<p>	      std::forward<_Args>(__args)...); // might throw</p>
+<p>	}</p>
+<p>      ~_Sp_counted_ptr_inplace() noexcept { }</p>
+<p>      virtual void</p>
+<p>      _M_dispose() noexcept</p>
+<p>      {</p>
+<p>	allocator_traits<_Alloc>::destroy(_M_impl._M_alloc(), _M_ptr()); // 析构内存， 释放内存放到了destroy</p>
+<p>      }</p>
+<p>      // Override because the allocator needs to know the dynamic type</p>
+<p>      virtual void</p>
+<p>      _M_destroy() noexcept</p>
+<p>      {</p>
+<p>	__allocator_type __a(_M_impl._M_alloc());</p>
+<p>	__allocated_ptr<__allocator_type> __guard_ptr{ __a, this };</p>
+<p>	this->~_Sp_counted_ptr_inplace(); // 和_Sp_counted_deleter相同的技术实现释放内存</p>
+<p>      }</p>
+<p>    private:</p>
+<p>      friend class __shared_count<_Lp>; // To be able to call _M_ptr().</p>
+<p>      // No longer used, but code compiled against old libstdc++ headers</p>
+<p>      // might still call it from __shared_ptr ctor to get the pointer out.</p>
+<p>      virtual void*</p>
+<p>      _M_get_deleter(const std::type_info& __ti) noexcept override  // deleter根据make shared技术返回，还没展开看</p>
+<p>      {</p>
+<p>	auto __ptr = const_cast<typename remove_cv<_Tp>::type*>(_M_ptr());</p>
+<p>	// Check for the fake type_info first, so we don't try to access it</p>
+<p>	// as a real type_info object. Otherwise, check if it's the real</p>
+<p>	// type_info for this class. With RTTI enabled we can check directly,</p>
+<p>	// or call a library function to do it.</p>
+<p>	if (&__ti == &_Sp_make_shared_tag::_S_ti()</p>
+<p>	    ||</p>
+<p>#if __cpp_rtti</p>
+<p>	    __ti == typeid(_Sp_make_shared_tag)</p>
+<p>#else</p>
+<p>	    _Sp_make_shared_tag::_S_eq(__ti)</p>
+<p>#endif</p>
+<p>	   )</p>
+<p>	  return __ptr;</p>
+<p>	return nullptr;</p>
+<p>      }</p>
+<p>      _Tp* _M_ptr() noexcept { return _M_impl._M_storage._M_ptr(); }  // 获取托管对象的指针</p>
+<p>      _Impl _M_impl;</p>
+<p>    };</p>
+</code>`<code>
+</code>_Sp_counted_ptr_inplace<code>的内存申请和</code>_Sp_counted_deleter<code>的内存申请类似，但是，参数有所不同：
+</code>`<code>Cpp
+<p> // 位于__shared_count中</p>
+<p>      template<typename _Tp, typename _Alloc, typename... _Args></p>
+<p>	__shared_count(_Tp*& __p, _Sp_alloc_shared_tag<_Alloc> __a,  // 注意，这里的__p是引用，也就是说实际上内存管理是在_Sp_counted_ptr_inplace中， 外部没有申请内存，只是用而已</p>
+<p>		       _Args&&... __args)</p>
+<p>	{</p>
+<p>	  typedef _Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp> _Sp_cp_type;  </p>
+<p>	  typename _Sp_cp_type::__allocator_type __a2(__a._M_a);  // 生成分配器</p>
+<p>	  auto __guard = std::__allocate_guarded(__a2); // 这里已经申请内存了</p>
+<p>	  _Sp_cp_type* __mem = __guard.get(); //  获取申请的内存</p>
+<p>	  auto __pi = ::new (__mem)</p>
+<p>	    _Sp_cp_type(__a._M_a, std::forward<_Args>(__args)...);  // 构造_Sp_counted_ptr_inplace</p>
+<p>	  __guard = nullptr;</p>
+<p>	  _M_pi = __pi;</p>
+<p>	  __p = __pi->_M_ptr();</p>
+<p>	}</p>
+</code>`<code>
+<p>可以看到，这里的托管对象指针是一个引用，因为要使用</code>_Sp_counted_ptr_inplace<code>来申请内存，外部没申请内存，其他的申请和构造和</code>_Sp_counted_deleter<code>类似。要了解</code>_Sp_counted_ptr_inplace<code>的内存申请原理，我们通过上面</code>_Sp_counted_ptr_inplace<code>的定义，先了解它的成员：</p>
+<p>* _Sp_counted_base：引用计数控制块</p>
+<p>* _M_impl：内部实现类，含有一个对齐数组内存：</code>__gnu_cxx::__aligned_buffer<_Tp> _M_storage<code>， Impl的实现是继承自一个EBO，满足EBO基类。</p>
+<p>所以，</code>_Sp_counted_ptr_inplace<code>的内存大小可以由下列式子计算：</p>
+</code>`<code>
+<p>sizeof(_Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp>) = </p>
+<p>    sizeof(std::_Sp_counted_base) + </p>
+<p>    sizeof(_Alloc) + </p>
+<p>    sizeof(_Tp) + </p>
+<p>    对齐填充</p>
+</code>`<code>
+<p>其中，</code>_Alloc<code>使用的是std::allocator，因此是空的，所以内存就变成了：</p>
+</code>`<code>
+<p>sizeof(_Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp>) = </p>
+<p>    sizeof(std::_Sp_counted_base) + </p>
+<p>    sizeof(_Tp) + </p>
+<p>    对齐填充</p>
+</code>`<code>
+<p>其中，</code>_TP<code>是一个</code>__gnu_cxx::__aligned_buffer<_Tp><code>类型的数据，实际上是一个数组，提供对齐存储能力，为</code>_TP<code>对象提供一块对齐的内存空间。对齐的实现可以简化为：</p>
+</code>`<code>Cpp
+<p>template<typename _Tp></p>
+<p>struct __aligned_buffer {</p>
+<p>    alignas(_Tp) unsigned char _M_storage[sizeof(_Tp)];</p>
+<p>    void<em> _M_addr() noexcept { return static_cast<void</em>>(_M_storage); }</p>
+<p>    const void<em> _M_addr() const noexcept { return static_cast<const void</em>>(_M_storage); }</p>
+<p>};</p>
+</code>`<code>
+<p>通过这种方式提供的实际上是一片未被初始化的内存，而不是直接构造</code>_Tp<code>对象，这样可以延缓对象的构造，方便后面使用placement new进行构造。</p>
+<p>了解这些后，我们重新看</code>_Sp_counted_ptr_inplace<code>的内存申请和构造，内存申请发生在：</code>auto __guard = std::__allocate_guarded(__a2);<code>，这时候申请的内存是没有构造的内存，申请的内存包括了</code>_Tp<code>和基类</code>_Sp_counted_base<code>的两个引用计数，然后再通过placement new进行构造：</code>auto __pi = ::new (__mem)</p>
+<p>_Sp_cp_type(__a._M_a, std::forward<_Args>(__args)...); <code>，此时，基类的引用计数和</code>_Tp<code>都被构造完成。</p>
+<p>##### _Sp_counted_ptr_inplace的使用场景</p>
+</code>`<code>Cpp
+<p>auto sptr = std::make_shared<Data>(1, "demo");</p>
+<p>sptr->xxx</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #110</p>
+    </footer>
+</body>
+</html>

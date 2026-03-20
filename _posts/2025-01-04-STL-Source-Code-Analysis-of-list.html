@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of list - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of list</h1>
+    <p class="date">2025-01-04</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> <span class="label">SGI</span> </div>
+    <hr>
+    <div class="content">
+<h1>源码</h1>
+<p>SGI的STL中，list的定义如下：</p>
+<p>``<code>Cpp</p>
+<p>struct _List_node_base {  // 双指针定义</p>
+<p>  _List_node_base* _M_next;</p>
+<p>  _List_node_base* _M_prev;</p>
+<p>};</p>
+<p>template <class _Tp></p>
+<p>struct _List_node : public _List_node_base {  // 存储的数据，继承自双链表结构体，因此也具有双指针</p>
+<p>  _Tp _M_data;</p>
+<p>};</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>class _List_base </p>
+<p>{</p>
+<p>public:</p>
+<p>  typedef _Alloc allocator_type;</p>
+<p>  allocator_type get_allocator() const { return allocator_type(); }</p>
+<p>  _List_base(const allocator_type&) {  // 构造函数构造一个节点，prev和next指针都指向当前节点</p>
+<p>    _M_node = _M_get_node();</p>
+<p>    _M_node->_M_next = _M_node;</p>
+<p>    _M_node->_M_prev = _M_node;  // 这里的prev始终指向头节点</p>
+<p>  }</p>
+<p>  ~_List_base() {</p>
+<p>    clear();  // 析构过程肯定需要对next指向的节点也析构，这个待会看源码</p>
+<p>    _M_put_node(_M_node);</p>
+<p>  }</p>
+<p>  void clear();</p>
+<p>protected:</p>
+<p>  typedef simple_alloc<_List_node<_Tp>, _Alloc> _Alloc_type;   // 仍然是使用二级内存配置器</p>
+<p>  _List_node<_Tp>* _M_get_node() { return _Alloc_type::allocate(1); }  // 实际上是分配一个节点</p>
+<p>  void _M_put_node(_List_node<_Tp>* __p) { _Alloc_type::deallocate(__p, 1); }  // 释放内存到二级内存分配器链表</p>
+<p>protected:</p>
+<p>  _List_node<_Tp>* _M_node;</p>
+<p>};</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>void </p>
+<p>_List_base<_Tp,_Alloc>::clear() </p>
+<p>{</p>
+<p>  _List_node<_Tp><em> __cur = (_List_node<_Tp></em>) _M_node->_M_next;  // cur指向当前节点的下一个节点</p>
+<p>  while (__cur != _M_node) {  // 把next指向的节点统统析构和放回内存链表</p>
+<p>    _List_node<_Tp>* __tmp = __cur;</p>
+<p>    __cur = (_List_node<_Tp><em>) __cur->_M_next; // 由于_M_next是_List_node_base</em>类型，因此要强转成_List_node * 类型</p>
+<p>    _Destroy(&__tmp->_M_data);  // 先析构</p>
+<p>    _M_put_node(__tmp); // 再放回二级内存配置器的内存链表中</p>
+<p>  }</p>
+<p>  _M_node->_M_next = _M_node;  // 将next指针指向当前节点</p>
+<p>  _M_node->_M_prev = _M_node; //  将prev指针指向当前节点</p>
+<p>}</p>
+<p>// 对外暴露的list继承自_list_base:</p>
+<p>class list : protected _List_base<_Tp, _Alloc> {</p>
+<p>  // requirements:</p>
+<p>  __STL_CLASS_REQUIRES(_Tp, _Assignable);</p>
+<p>  typedef _List_base<_Tp, _Alloc> _Base;</p>
+<p>protected:</p>
+<p>  typedef void* _Void_pointer;</p>
+<p>public:      </p>
+<p>  typedef _Tp value_type;</p>
+<p>  typedef value_type* pointer;</p>
+<p>  typedef const value_type* const_pointer;</p>
+<p>  typedef value_type& reference;</p>
+<p>  typedef const value_type& const_reference;</p>
+<p>  typedef _List_node<_Tp> _Node;</p>
+<p>  typedef size_t size_type;</p>
+<p>  typedef ptrdiff_t difference_type;</p>
+<p>  typedef typename _Base::allocator_type allocator_type;</p>
+<p>  allocator_type get_allocator() const { return _Base::get_allocator(); }</p>
+<p>public:</p>
+<p>  typedef _List_iterator<_Tp,_Tp&,_Tp*>             iterator;</p>
+<p>  typedef _List_iterator<_Tp,const _Tp&,const _Tp*> const_iterator;</p>
+<p>#ifdef __STL_CLASS_PARTIAL_SPECIALIZATION</p>
+<p>  typedef reverse_iterator<const_iterator> const_reverse_iterator;</p>
+<p>  typedef reverse_iterator<iterator>       reverse_iterator;</p>
+<p>#else /<em> __STL_CLASS_PARTIAL_SPECIALIZATION </em>/</p>
+<p>  typedef reverse_bidirectional_iterator<const_iterator,value_type,</p>
+<p>                                         const_reference,difference_type></p>
+<p>          const_reverse_iterator;</p>
+<p>  typedef reverse_bidirectional_iterator<iterator,value_type,reference,</p>
+<p>                                         difference_type></p>
+<p>          reverse_iterator; </p>
+<p>#endif /<em> __STL_CLASS_PARTIAL_SPECIALIZATION </em>/</p>
+<p>protected:</p>
+<p>#ifdef __STL_HAS_NAMESPACES</p>
+<p>  using _Base::_M_node;</p>
+<p>  using _Base::_M_put_node;  // 释放内存</p>
+<p>  using _Base::_M_get_node;  // 申请内存</p>
+<p>#endif /<em> __STL_HAS_NAMESPACES </em>/</p>
+<p>protected:</p>
+<p>  _Node* _M_create_node(const _Tp& __x)  // 申请节点并使用入参构造</p>
+<p>  {</p>
+<p>    _Node* __p = _M_get_node();  </p>
+<p>    __STL_TRY {</p>
+<p>      _Construct(&__p->_M_data, __x);</p>
+<p>    }</p>
+<p>    __STL_UNWIND(_M_put_node(__p));</p>
+<p>    return __p;</p>
+<p>  }</p>
+<p>  _Node* _M_create_node()  // 申请节点并默认构造</p>
+<p>  {</p>
+<p>    _Node* __p = _M_get_node();</p>
+<p>    __STL_TRY {</p>
+<p>      _Construct(&__p->_M_data);</p>
+<p>    }</p>
+<p>    __STL_UNWIND(_M_put_node(__p));</p>
+<p>    return __p;</p>
+<p>  }</p>
+<p>public:</p>
+<p>  explicit list(const allocator_type& __a = allocator_type()) : _Base(__a) {}</p>
+<p>  iterator begin()             { return (_Node*)(_M_node->_M_next); } // list的begin是this节点的下一个，也就是说this节点不存储数据，不给用户使用</p>
+<p>  const_iterator begin() const { return (_Node*)(_M_node->_M_next); }  </p>
+<p>  iterator end()             { return _M_node; }  // this 节点就是end</p>
+<p>  const_iterator end() const { return _M_node; }</p>
+<p>  reverse_iterator rbegin() </p>
+<p>    { return reverse_iterator(end()); }</p>
+<p>  const_reverse_iterator rbegin() const </p>
+<p>    { return const_reverse_iterator(end()); }</p>
+<p>  reverse_iterator rend()</p>
+<p>    { return reverse_iterator(begin()); }</p>
+<p>  const_reverse_iterator rend() const</p>
+<p>    { return const_reverse_iterator(begin()); }</p>
+<p>  bool empty() const { return _M_node->_M_next == _M_node; } //  this节点不给用户使用，所以判断是不是空只需要看next是不是指向this节点</p>
+<p>  size_type size() const {</p>
+<p>    size_type __result = 0;</p>
+<p>    distance(begin(), end(), __result);</p>
+<p>    return __result;</p>
+<p>  }</p>
+<p>  size_type max_size() const { return size_type(-1); }</p>
+<p>  reference front() { return *begin(); } </p>
+<p>  const_reference front() const { return *begin(); }</p>
+<p>  reference back() { return *(--end()); } </p>
+<p>  const_reference back() const { return *(--end()); }</p>
+<p>  void swap(list<_Tp, _Alloc>& __x) { __STD::swap(_M_node, __x._M_node); }  // <strong>this节点可以说是哨兵，swap'的时候，直接swap哨兵就可以了</strong></p>
+<p>  iterator insert(iterator __position, const _Tp& __x) {</p>
+<p>    _Node* __tmp = _M_create_node(__x);</p>
+<p>    __tmp->_M_next = __position._M_node;</p>
+<p>    __tmp->_M_prev = __position._M_node->_M_prev;</p>
+<p>    __position._M_node->_M_prev->_M_next = __tmp;</p>
+<p>    __position._M_node->_M_prev = __tmp;</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>  iterator insert(iterator __position) { return insert(__position, _Tp()); }</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  // Check whether it's an integral type.  If so, it's not an iterator.</p>
+<p>  template<class _Integer></p>
+<p>  void _M_insert_dispatch(iterator __pos, _Integer __n, _Integer __x,</p>
+<p>                          __true_type) {</p>
+<p>    _M_fill_insert(__pos, (size_type) __n, (_Tp) __x);</p>
+<p>  }</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_insert_dispatch(iterator __pos,</p>
+<p>                          _InputIterator __first, _InputIterator __last,</p>
+<p>                          __false_type);</p>
+<p>  template <class _InputIterator></p>
+<p>  void insert(iterator __pos, _InputIterator __first, _InputIterator __last) {</p>
+<p>    typedef typename _Is_integer<_InputIterator>::_Integral _Integral;</p>
+<p>    _M_insert_dispatch(__pos, __first, __last, _Integral());</p>
+<p>  }</p>
+<p>#else /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void insert(iterator __position, const _Tp<em> __first, const _Tp</em> __last);</p>
+<p>  void insert(iterator __position,</p>
+<p>              const_iterator __first, const_iterator __last);</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void insert(iterator __pos, size_type __n, const _Tp& __x)</p>
+<p>    { _M_fill_insert(__pos, __n, __x); }</p>
+<p>  void _M_fill_insert(iterator __pos, size_type __n, const _Tp& __x); </p>
+<p>  void push_front(const _Tp& __x) { insert(begin(), __x); }</p>
+<p>  void push_front() {insert(begin());}</p>
+<p>  void push_back(const _Tp& __x) { insert(end(), __x); }</p>
+<p>  void push_back() {insert(end());}</p>
+<p>  iterator erase(iterator __position) {</p>
+<p>    _List_node_base* __next_node = __position._M_node->_M_next;</p>
+<p>    _List_node_base* __prev_node = __position._M_node->_M_prev;</p>
+<p>    _Node<em> __n = (_Node</em>) __position._M_node;</p>
+<p>    __prev_node->_M_next = __next_node;</p>
+<p>    __next_node->_M_prev = __prev_node;</p>
+<p>    _Destroy(&__n->_M_data);</p>
+<p>    _M_put_node(__n);</p>
+<p>    return iterator((_Node*) __next_node);</p>
+<p>  }</p>
+<p>  iterator erase(iterator __first, iterator __last);</p>
+<p>  void clear() { _Base::clear(); }</p>
+<p>  void resize(size_type __new_size, const _Tp& __x);</p>
+<p>  void resize(size_type __new_size) { this->resize(__new_size, _Tp()); }</p>
+<p>  void pop_front() { erase(begin()); }</p>
+<p>  void pop_back() { </p>
+<p>    iterator __tmp = end();</p>
+<p>    erase(--__tmp);</p>
+<p>  }</p>
+<p>  list(size_type __n, const _Tp& __value,</p>
+<p>       const allocator_type& __a = allocator_type())</p>
+<p>    : _Base(__a)</p>
+<p>    { insert(begin(), __n, __value); }</p>
+<p>  explicit list(size_type __n)</p>
+<p>    : _Base(allocator_type())</p>
+<p>    { insert(begin(), __n, _Tp()); }</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  // We don't need any dispatching tricks here, because insert does all of</p>
+<p>  // that anyway.  </p>
+<p>  template <class _InputIterator></p>
+<p>  list(_InputIterator __first, _InputIterator __last,</p>
+<p>       const allocator_type& __a = allocator_type())</p>
+<p>    : _Base(__a)</p>
+<p>    { insert(begin(), __first, __last); }</p>
+<p>#else /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  list(const _Tp<em> __first, const _Tp</em> __last,</p>
+<p>       const allocator_type& __a = allocator_type())</p>
+<p>    : _Base(__a)</p>
+<p>    { this->insert(begin(), __first, __last); }</p>
+<p>  list(const_iterator __first, const_iterator __last,</p>
+<p>       const allocator_type& __a = allocator_type())</p>
+<p>    : _Base(__a)</p>
+<p>    { this->insert(begin(), __first, __last); }</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  list(const list<_Tp, _Alloc>& __x) : _Base(__x.get_allocator())</p>
+<p>    { insert(begin(), __x.begin(), __x.end()); }</p>
+<p>  ~list() { }</p>
+<p>  list<_Tp, _Alloc>& operator=(const list<_Tp, _Alloc>& __x);</p>
+<p>public:</p>
+<p>  // assign(), a generalized assignment member function.  Two</p>
+<p>  // versions: one that takes a count, and one that takes a range.</p>
+<p>  // The range version is a member template, so we dispatch on whether</p>
+<p>  // or not the type is an integer.</p>
+<p>  void assign(size_type __n, const _Tp& __val) { _M_fill_assign(__n, __val); }</p>
+<p>  void _M_fill_assign(size_type __n, const _Tp& __val);</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _InputIterator></p>
+<p>  void assign(_InputIterator __first, _InputIterator __last) {</p>
+<p>    typedef typename _Is_integer<_InputIterator>::_Integral _Integral;</p>
+<p>    _M_assign_dispatch(__first, __last, _Integral());</p>
+<p>  }</p>
+<p>  template <class _Integer></p>
+<p>  void _M_assign_dispatch(_Integer __n, _Integer __val, __true_type)</p>
+<p>    { _M_fill_assign((size_type) __n, (_Tp) __val); }</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_assign_dispatch(_InputIterator __first, _InputIterator __last,</p>
+<p>                          __false_type);</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>protected:</p>
+<p>  void transfer(iterator __position, iterator __first, iterator __last) {</p>
+<p>    if (__position != __last) {</p>
+<p>      // Remove [first, last) from its old position.</p>
+<p>      __last._M_node->_M_prev->_M_next     = __position._M_node;</p>
+<p>      __first._M_node->_M_prev->_M_next    = __last._M_node;</p>
+<p>      __position._M_node->_M_prev->_M_next = __first._M_node; </p>
+<p>      // Splice [first, last) into its new position.</p>
+<p>      _List_node_base* __tmp      = __position._M_node->_M_prev;</p>
+<p>      __position._M_node->_M_prev = __last._M_node->_M_prev;</p>
+<p>      __last._M_node->_M_prev     = __first._M_node->_M_prev; </p>
+<p>      __first._M_node->_M_prev    = __tmp;</p>
+<p>    }</p>
+<p>  }</p>
+<p>public:</p>
+<p>  void splice(iterator __position, list& __x) {</p>
+<p>    if (!__x.empty()) </p>
+<p>      this->transfer(__position, __x.begin(), __x.end());</p>
+<p>  }</p>
+<p>  void splice(iterator __position, list&, iterator __i) {</p>
+<p>    iterator __j = __i;</p>
+<p>    ++__j;</p>
+<p>    if (__position == __i || __position == __j) return;</p>
+<p>    this->transfer(__position, __i, __j);</p>
+<p>  }</p>
+<p>  void splice(iterator __position, list&, iterator __first, iterator __last) {</p>
+<p>    if (__first != __last) </p>
+<p>      this->transfer(__position, __first, __last);</p>
+<p>  }</p>
+<p>  void remove(const _Tp& __value);</p>
+<p>  void unique();</p>
+<p>  void merge(list& __x);</p>
+<p>  void reverse();</p>
+<p>  void sort();</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _Predicate> void remove_if(_Predicate);</p>
+<p>  template <class _BinaryPredicate> void unique(_BinaryPredicate);</p>
+<p>  template <class _StrictWeakOrdering> void merge(list&, _StrictWeakOrdering);</p>
+<p>  template <class _StrictWeakOrdering> void sort(_StrictWeakOrdering);</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>};</p>
+</code>`<code>
+<p>虽然链表使用了继承来实现数据和双指针，但是仍然可以用下图表示：</p>
+<img src="https://github.com/user-attachments/assets/e05280b2-6a41-4607-8669-122b956365ba" alt="image" style="max-width:100%;">
+<p>由上图可以看出，list的迭代器类型应该是一个bidirectional iterator，代码中也是如此定义的：</p>
+</code>`<code>Cpp
+<p>struct _List_iterator_base {</p>
+<p>  typedef size_t                     size_type;</p>
+<p>  typedef ptrdiff_t                  difference_type;</p>
+<p>  typedef bidirectional_iterator_tag iterator_category;</p>
+<p>  _List_node_base* _M_node;</p>
+<p>  _List_iterator_base(_List_node_base* __x) : _M_node(__x) {}</p>
+<p>  _List_iterator_base() {}</p>
+<p>  void _M_incr() { _M_node = _M_node->_M_next; } // 定义了递增，这会在继承类中得到体现</p>
+<p>  void _M_decr() { _M_node = _M_node->_M_prev; } // 和递减，这会在继承类中得到体现</p>
+<p>  bool operator==(const _List_iterator_base& __x) const {</p>
+<p>    return _M_node == __x._M_node;</p>
+<p>  }</p>
+<p>  bool operator!=(const _List_iterator_base& __x) const {</p>
+<p>    return _M_node != __x._M_node;</p>
+<p>  }</p>
+<p>};  </p>
+</code>`<code>
+<p>不同于</code>vector<code>，插入后，插入节点之后的迭代器都会失效，删除也是。</code>list<code>的插入和删除都不会导致其他迭代器失效，因为list的迭代器都是指针，插入和删除不会影响其他指针。</p>
+<img src="https://github.com/user-attachments/assets/2cfd25f7-33f0-40a0-9b16-7eccc68c0ca4" alt="image" style="max-width:100%;">
+<p>迭代器的继承类，也就是实际的迭代器，上述的base迭代器只定义了基本功能：</p>
+</code>`<code>Cpp
+<p>template<class _Tp, class _Ref, class _Ptr></p>
+<p>struct _List_iterator : public _List_iterator_base {</p>
+<p>  typedef _List_iterator<_Tp,_Tp&,_Tp*>             iterator;</p>
+<p>  typedef _List_iterator<_Tp,const _Tp&,const _Tp*> const_iterator;</p>
+<p>  typedef _List_iterator<_Tp,_Ref,_Ptr>             _Self;</p>
+<p>  typedef _Tp value_type;</p>
+<p>  typedef _Ptr pointer;</p>
+<p>  typedef _Ref reference;</p>
+<p>  typedef _List_node<_Tp> _Node;</p>
+<p>  _List_iterator(_Node* __x) : _List_iterator_base(__x) {}</p>
+<p>  _List_iterator() {}</p>
+<p>  _List_iterator(const iterator& __x) : _List_iterator_base(__x._M_node) {}</p>
+<p>  reference operator<em>() const { return ((_Node</em>) _M_node)->_M_data; }</p>
+<p>#ifndef __SGI_STL_NO_ARROW_OPERATOR</p>
+<p>  pointer operator->() const { return &(operator*()); }</p>
+<p>#endif /<em> __SGI_STL_NO_ARROW_OPERATOR </em>/</p>
+<p>  _Self& operator++() {   // 递增使用的是base迭代器的递增函数， 这个是++it</p>
+<p>    this->_M_incr();</p>
+<p>    return *this;</p>
+<p>  }</p>
+<p>  _Self operator++(int) {    // 递增使用的是base迭代器的递增函数， 这个是it++，所以我们还是尽量用it++，少了一次拷贝操作</p>
+<p>    _Self __tmp = *this;</p>
+<p>    this->_M_incr();</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>  _Self& operator--() {   // 递减使用的是base迭代器的递减函数， 这个是--it</p>
+<p>    this->_M_decr();</p>
+<p>    return *this;</p>
+<p>  }</p>
+<p>  _Self operator--(int) {  // 递减使用的是base迭代器的递减函数， 这个是it--，同理，尽量使用--it</p>
+<p>    _Self __tmp = *this;</p>
+<p>    this->_M_decr();</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+<p>};</p>
+</code>`<code>
+<p>和之前迭代器描述对应，容器都需要定义自己的</code>iterator_category<code>函数，以便算法在使用迭代器时，匹配最优的算法：</p>
+</code>`<code>Cpp
+<p>inline bidirectional_iterator_tag</p>
+<p>iterator_category(const _List_iterator_base&)</p>
+<p>{</p>
+<p>  return bidirectional_iterator_tag();</p>
+<p>}</p>
+</code>`<code>
+</code>list<code>的迭代器类型就是</code>bidirectional_iterator_tag<code>。
+<h1>数据结构</h1>
+<p>从上面的源码可以看出，</code>list<code>是一个双向链表，但是需要注意，<strong></code>list<code>是一个环状双向链表</strong>，因此</code>clear<code>函数只需要使用next指针不断迭代，就可以将除了this的节点都析构和释放内存。</p>
+<img src="https://github.com/user-attachments/assets/153cbaf3-5222-47c4-8bc7-b4a7d4a48c30" alt="image" style="max-width:100%;">
+<p>从</code>begin<code>和</code>end<code>来看，list的当前节点永远是不用于存储用户数据的，从上图也能看出来：</p>
+</code>`<code>Cpp
+<p>  iterator begin()             { return (_Node*)(_M_node->_M_next); } // begin是this节点的下一个节点</p>
+<p>  const_iterator begin() const { return (_Node*)(_M_node->_M_next); }</p>
+<p>  iterator end()             { return _M_node; } // end就是当前节点</p>
+<p>  const_iterator end() const { return _M_node; }</p>
+</code>`<code>
+<p>根据这个特性，判断节点是否为空，只需要判断this的next节点指向的是不是自己即可：</p>
+</code>`<code>Cpp
+<p>  bool empty() const { return _M_node->_M_next == _M_node; }</p>
+</code>`<code>
+<p>list的头节点和尾节点也是根据begin和end来获取：</p>
+</code>`<code>Cpp
+<p>  reference front() { return *begin(); }</p>
+<p>  const_reference front() const { return *begin(); }</p>
+<p>  reference back() { return *(--end()); }</p>
+<p>  const_reference back() const { return *(--end()); }</p>
+</code>`<code>
+<h2>list构造</h2>
+<p>list的构造实际上委托的基函数_List_base进行构造：</p>
+</code>`<code>Cpp
+<p>explicit list(const allocator_type& __a = allocator_type()) : _Base(__a) {}</p>
+</code>`<code>
+<p>其中的_Base就是_List_base，</code>typedef _List_base<_Tp, _Alloc> _Base;<code>：</p>
+</code>`<code>Cpp
+<p>_List_base(const allocator_type&) {</p>
+<p>    _M_node = _M_get_node();</p>
+<p>    _M_node->_M_next = _M_node; // 初始化next和prev都指向哨兵</p>
+<p>    _M_node->_M_prev = _M_node;</p>
+<p>  }</p>
+</code>`<code>
+<p>_List_base的构造，使用</code><code>_M_get_node</code>，`<code>_M_get_node</code>内部使用二级内存分配器分配一个元素的大小，作为哨兵：</p>
+<p>``<code>Cpp</p>
+<p>_List_node<_Tp>* _M_get_node() { return _Alloc_type::allocate(1); }</p>
+</code>`<code>
+<h2>插入</h2>
+</code>list<code>的插入有几种重载：在指定位置插入一个节点、在指定位置插入多个数据（可能是指针，也可能是迭代器，或者是n个一样的数据），但是由于list的特性，实际上所有的insert都会调用指定位置插入一个节点的方法，因此我们只看中一个：
+</code>`<code>Cpp
+<p>  iterator insert(iterator __position, const _Tp& __x) {</p>
+<p>    _Node* __tmp = _M_create_node(__x);  // 内部会申请内存，并构造</p>
+<p>    __tmp->_M_next = __position._M_node;  // 这就是链表的基本操作了，临时节点构造好后，next指向要插入节点</p>
+<p>    __tmp->_M_prev = __position._M_node->_M_prev; // 双向链表，临时节点的prev指向要插入位置的前一个</p>
+<p>    __position._M_node->_M_prev->_M_next = __tmp; // 然后让要插入位置前一个节点的next指向临时节点</p>
+<p>    __position._M_node->_M_prev = __tmp; // 插入位置的节点的prev指向临时节点</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+</code>`<code>
+<p>具体操作可以参考图：</p>
+<img src="https://github.com/user-attachments/assets/97db2888-3e4c-4ec7-9d3b-fc0a725d6502" alt="image" style="max-width:100%;">
+<h2>push_front, push_back, erase</h2>
+<p>push操作都是基于insert实现的：</p>
+</code>`<code>Cpp
+<p>  void push_front(const _Tp& __x) { insert(begin(), __x); }</p>
+<p>  void push_front() {insert(begin());}</p>
+<p>  void push_back(const _Tp& __x) { insert(end(), __x); }</p>
+<p>  void push_back() {insert(end());}</p>
+</code>`<code>
+<p>erase的操作也有多个版本：擦除一个，擦除多个，由于list的特性，擦除多个实际上也是多次调用擦除一次：</p>
+</code>`<code>Cpp
+<p>  iterator erase(iterator __position) {</p>
+<p>    _List_node_base* __next_node = __position._M_node->_M_next;  // 取出next和prev</p>
+<p>    _List_node_base* __prev_node = __position._M_node->_M_prev;</p>
+<p>    _Node<em> __n = (_Node</em>) __position._M_node;</p>
+<p>    __prev_node->_M_next = __next_node;  // prev的next 指向取出的next</p>
+<p>    __next_node->_M_prev = __prev_node; // next的prev指向取出的prev</p>
+<p>    _Destroy(&__n->_M_data);  // 析构</p>
+<p>    _M_put_node(__n); // 并释放内存</p>
+<p>    return iterator((_Node*) __next_node);</p>
+<p>  }</p>
+<p>// erase多个</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>typename list<_Tp,_Alloc>::iterator list<_Tp, _Alloc>::erase(iterator __first, </p>
+<p>                                                             iterator __last)</p>
+<p>{</p>
+<p>  while (__first != __last)</p>
+<p>    erase(__first++);</p>
+<p>  return __last;</p>
+<p>}</p>
+</code>`<code>
+<img src="https://github.com/user-attachments/assets/cc4650ae-3e9d-400d-983d-d2245290d7ba" alt="image" style="max-width:100%;">
+<h2></code>list<code>提供了一个叫</code> transfer<code>的函数</h2>
+</code>`<code>Cpp
+<p>  void transfer(iterator __position, iterator __first, iterator __last) {</p>
+<p>    if (__position != __last) {</p>
+<p>      // Remove [first, last) from its old position.</p>
+<p>      __last._M_node->_M_prev->_M_next     = __position._M_node;  // step1</p>
+<p>      __first._M_node->_M_prev->_M_next    = __last._M_node;  // step2</p>
+<p>      __position._M_node->_M_prev->_M_next = __first._M_node;   // step3</p>
+<p>      // Splice [first, last) into its new position.</p>
+<p>      _List_node_base* __tmp      = __position._M_node->_M_prev;  // red node</p>
+<p>      __position._M_node->_M_prev = __last._M_node->_M_prev; // step4</p>
+<p>      __last._M_node->_M_prev     = __first._M_node->_M_prev;  // step5</p>
+<p>      __first._M_node->_M_prev    = __tmp; // step6</p>
+<p>    }</p>
+<p>  }</p>
+</code>`<code>
+</code> transfer<code>的目的是将一片区域[first, last)的节点迁移到某个位置，这个位置可能是同一个list的，也可能是另一个list的，我画了一张图表示这个函数的目的，我觉得比《STL 源码剖析》的好理解：
+<p>* 最终效果</p>
+<img src="https://github.com/user-attachments/assets/03981f97-f2ec-4a3f-8202-ef2000baeaff" alt="image" style="max-width:100%;">
+<p>* 每一步的演变</p>
+<img src="https://github.com/user-attachments/assets/14955a64-b439-4977-b168-ea5dc4a8464b" alt="stl_list_transfer drawio" style="max-width:100%;">
+</code>transfer<code>函数是不对用户开放的，但是有基于</code>transfer<code>开发的其他api开放给用户。
+<h2>splice函数</h2>
+</code>`<code>Cpp
+<p>  void splice(iterator __position, list& __x) {  // 将x接到position之前，x和*this必须不是一个链表</p>
+<p>    if (!__x.empty()) </p>
+<p>      this->transfer(__position, __x.begin(), __x.end());</p>
+<p>  }</p>
+<p>  void splice(iterator __position, list&, iterator __i) {  // 将i所指的元素接合到position之前，此时position和i可以指向一个list</p>
+<p>    iterator __j = __i;</p>
+<p>    ++__j;</p>
+<p>    if (__position == __i || __position == __j) return;</p>
+<p>    this->transfer(__position, __i, __j);</p>
+<p>  }</p>
+<p>  void splice(iterator __position, list&, iterator __first, iterator __last) { // 这个其实就是transfer</p>
+<p>    if (__first != __last) </p>
+<p>      this->transfer(__position, __first, __last);</p>
+<p>  }</p>
+</code>`<code>
+<p>splice是拼接的意思，言外之意就是将list、区间拼接到position的链表上。我们先看下使用方法：</p>
+</code>`<code>Cpp
+<p>std::vector<int> iv {1, 2, 3, 4, 5};</p>
+<p>std::list<int> il {iv.begin(), iv.end()};</p>
+<p>std::list<int> ilist {0, 2, 99, 3, 4};</p>
+<p>auto pos = std::find(ilist .begin(), ilist .end(), 99);</p>
+<p>ilist.splice(it, il);  // 0， 2， 1， 2， 3， 4， 5， 99， 3， 4</p>
+</code>`<code>
+<h2>merge</h2>
+<p>* merge:</p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>void list<_Tp, _Alloc>::merge(list<_Tp, _Alloc>& __x)</p>
+<p>{</p>
+<p>  iterator __first1 = begin();</p>
+<p>  iterator __last1 = end();</p>
+<p>  iterator __first2 = __x.begin();</p>
+<p>  iterator __last2 = __x.end();</p>
+<p>  while (__first1 != __last1 && __first2 != __last2)</p>
+<p>    if (<em>__first2 < </em>__first1) { // 找到小于list1的值</p>
+<p>      iterator __next = __first2;</p>
+<p>      transfer(__first1, __first2, ++__next); // 将小于first1的值合并到first1之前</p>
+<p>      __first2 = __next;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      ++__first1;</p>
+<p>  if (__first2 != __last2) transfer(__last1, __first2, __last2);</p>
+<p>}</p>
+</code>`<code>
+<p>可以看出，使用merge的两个list必须是有序递增的，merge把list2的元素合并到list1上，其中合并操作使用的就是transfer。</p>
+<h2>reverse</h2>
+<p>reverse函数利用了list双向链表的特点，从哨兵开始，分别交换哨兵的prev和next，然后哨兵向右（原来的next，也就是交换后的prev），继续交换prev和next，知道所有节点都交换完成。为了方便演示，我把next指针用红色箭头表示，prev用绿色箭头表示，我们看图:</p>
+<img src="https://github.com/user-attachments/assets/19250feb-b428-485f-81b0-3493f1201bce" alt="stl_list_reverse drawio" style="max-width:100%;">
+<h2>sort</h2>
+<p>由于STL的sort只接受random access iterator的容器，因此list无法使用STL的sort，需要定制化：</p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>void list<_Tp, _Alloc>::sort()</p>
+<p>{</p>
+<p>  // Do nothing if the list has length 0 or 1.</p>
+<p>  if (_M_node->_M_next != _M_node && _M_node->_M_next->_M_next != _M_node) {  // 没有元素或者只有一个元素，就默认满足条件</p>
+<p>    list<_Tp, _Alloc> __carry; // 临时链表，排序过程中暂存元素</p>
+<p>    list<_Tp, _Alloc> __counter[64];  // 在归并排序过程中存储不同长度的有序链表</p>
+<p>    int __fill = 0;  // 表示counter数组中已有的链表数量</p>
+<p>    while (!empty()) {</p>
+<p>      __carry.splice(__carry.begin(), *this, begin());</p>
+<p>      int __i = 0;</p>
+<p>      while(__i < __fill && !__counter[__i].empty()) {</p>
+<p>        __counter[__i].merge(__carry);</p>
+<p>        __carry.swap(__counter[__i++]);</p>
+<p>      }</p>
+<p>      __carry.swap(__counter[__i]);         </p>
+<p>      if (__i == __fill) ++__fill;</p>
+<p>    } </p>
+<p>    for (int __i = 1; __i < __fill; ++__i)</p>
+<p>      __counter[__i].merge(__counter[__i-1]);</p>
+<p>    swap(__counter[__fill-1]);</p>
+<p>  }</p>
+<p>}</p>
+</code>``
+<p>list的sort使用的是归并排序算法，TODO</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #91</p>
+    </footer>
+</body>
+</html>

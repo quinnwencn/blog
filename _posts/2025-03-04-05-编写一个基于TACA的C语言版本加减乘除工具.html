@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>05 编写一个基于TA/CA的C语言版本加减乘除工具 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>05 编写一个基于TA/CA的C语言版本加减乘除工具</h1>
+    <p class="date">2025-03-04</p>
+    <div class="labels"><span class="label">TrustZone</span> <span class="label">TEE</span> <span class="label">ARMv8</span> <span class="label">QEMU</span> <span class="label">op-tee</span> </div>
+    <hr>
+    <div class="content">
+<p>在编写之前，我们先看看OP-TEE仓库里给出的例子里，都包含了哪些文件，这些文件都是什么架构：</p>
+<p>``<code>bash</p>
+<p>$ tree</p>
+<p>.</p>
+<p>├── Android.mk                             # 用于 Android 系统编译的 Makefile</p>
+<p>├── CMakeLists.txt                         # 用于 CMake 构建系统的配置文件</p>
+<p>├── host                                         # REE侧的代码，也就是CA代码</p>
+<p>│   ├── main.c                                # hello_world的源代码</p>
+<p>│   └── Makefile                            # Makefile编译 REE代码</p>
+<p>├── Makefile                                  # 顶层 Makefile（协调 host 和 ta 的编译）</p>
+<p>└── ta                                            # TEE侧资源</p>
+<p>    ├── Android.mk                        # TA 的 Android 编译配置</p>
+<p>    ├── hello_world_ta.c                 # TA 的入口和业务逻辑实现</p>
+<p>    ├── include                                 # TA的依赖头文件</p>
+<p>    │   └── hello_world_ta.h              # TA 的命令和结构体定义</p>
+<p>    ├── Makefile                               # TA 的独立编译配置（直接生成.ta 文件）</p>
+<p>    ├── sub.mk                                  # 记录ta的源文件和依赖的头文件目录， 集成到OP-TEE的全局构建系统</p>
+<p>    └── user_ta_header_defines.h      # TA 的元数据定义（UUID、堆栈大小等）</p>
+<p>3 directories, 11 files</p>
+</code>`<code>
+<p>根据这个架构，我们可以编写自己的加减乘除计算器。我们的工程，将以OP-TEE的</code>hello_world<code>为基础，增加自定义的功能。</p>
+<li>拷贝hello_world为coperate</li>
+</code>`<code>bash
+<p>cd optee_example</p>
+<p>cp -r hello_world coperate</p>
+</code>`<code>
+<li>修改TEE的UUID</li>
+<p>每对TA/CA对应的UUID都是唯一的，这也是REE侧的CA能准确匹配到TEE侧对应CA的依据，因此我们需要为我们的coperate生成一个独一无二的UUID，我们可以使用OP-TEE推荐的网站生成：<a href="http://www.itu.int/ITU-T/asn1/uuid.html">ITU-T UUID generator</a></p>
+<img src="https://github.com/user-attachments/assets/c7bbd8d9-aea1-4284-8aee-90696772a172" alt="Image" style="max-width:100%;">
+<img src="https://github.com/user-attachments/assets/5ae9f6ea-8e30-461d-9f12-f8cc5d6e2b8d" alt="Image" style="max-width:100%;">
+<p>获取UUID后，我们需要现在hello_ta.h(原来的hello_world_ta.h)中修改:</p>
+</code>`<code>C
+<p>#define TA_HELLO_UUID \</p>
+<p>	{ 0x35249876, 0xd953, 0x4161, \</p>
+<p>		{ 0x9d, 0x4a, 0x22, 0x06, 0x1f, 0x4b, 0x70, 0x20} }   // 35249876-d953-4161-9d4a-22061f4b7020</p>
+</code>`<code>
+<p>这里需要将UUID按照对应的格式拆分填写</p>
+<p>然后修改TA的Makefile中的BINARY的UUID为新的值：</p>
+</code>`<code>C
+<h1>BINARY=8aaaf200-2450-11e4-abe2-0002a5d5c51b</h1>
+<p>BINARY=35249876-d953-4161-9d4a-22061f4b7020</p>
+</code>`<code>
+<li>修改REE代码：</li>
+</code>`<code>C
+<p>/*</p>
+<p> * Copyright (c) 2016, Linaro Limited</p>
+<p> * All rights reserved.</p>
+<p> *</p>
+<p> * Redistribution and use in source and binary forms, with or without</p>
+<p> * modification, are permitted provided that the following conditions are met:</p>
+<p> *</p>
+<p> * 1. Redistributions of source code must retain the above copyright notice,</p>
+<p> * this list of conditions and the following disclaimer.</p>
+<p> *</p>
+<p> * 2. Redistributions in binary form must reproduce the above copyright notice,</p>
+<p> * this list of conditions and the following disclaimer in the documentation</p>
+<p> * and/or other materials provided with the distribution.</p>
+<p> *</p>
+<p> * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"</p>
+<p> * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE</p>
+<p> * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE</p>
+<p> * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE</p>
+<p> * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR</p>
+<p> * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF</p>
+<p> * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS</p>
+<p> * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN</p>
+<p> * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)</p>
+<p> * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE</p>
+<p> * POSSIBILITY OF SUCH DAMAGE.</p>
+<p> */</p>
+<p>#include <err.h></p>
+<p>#include <stdio.h></p>
+<p>#include <string.h></p>
+<p>/<em> OP-TEE TEE client API (built by optee_client) </em>/</p>
+<p>#include <tee_client_api.h></p>
+<p>/<em> For the UUID (found in the TA's h-file(s)) </em>/</p>
+<p>#include <hello_ta.h></p>
+<p>int main(int argc, char** argv)</p>
+<p>{</p>
+<p>	TEEC_Result res;</p>
+<p>	TEEC_Context ctx;</p>
+<p>	TEEC_Session sess;</p>
+<p>	TEEC_Operation op;</p>
+<p>	TEEC_UUID uuid = TA_HELLO_UUID;</p>
+<p>	uint32_t err_origin;</p>
+<p>	if (argc != 4) {</p>
+<p>		printf("Usage: %s <num1> <operand> <num2>\n", argv[0]);</p>
+<p>		return -1;</p>
+<p>	}</p>
+<p>	/<em> Initialize a context connecting us to the TEE </em>/</p>
+<p>	res = TEEC_InitializeContext(NULL, &ctx);</p>
+<p>	if (res != TEEC_SUCCESS)</p>
+<p>		errx(1, "TEEC_InitializeContext failed with code 0x%x", res);</p>
+<p>	/*</p>
+<p>	 * Open a session to the "hello world" TA, the TA will print "hello</p>
+<p>	 * world!" in the log when the session is created.</p>
+<p>	 */</p>
+<p>	res = TEEC_OpenSession(&ctx, &sess, &uuid,</p>
+<p>			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);</p>
+<p>	if (res != TEEC_SUCCESS)</p>
+<p>		errx(1, "TEEC_Opensession failed with code 0x%x origin 0x%x",</p>
+<p>			res, err_origin);</p>
+<p>	/*</p>
+<p>	 * Execute a function in the TA by invoking it, in this case</p>
+<p>	 * we're incrementing a number.</p>
+<p>	 *</p>
+<p>	 * The value of command ID part and how the parameters are</p>
+<p>	 * interpreted is part of the interface provided by the TA.</p>
+<p>	 */</p>
+<p>	/<em> Clear the TEEC_Operation struct </em>/</p>
+<p>	memset(&op, 0, sizeof(op));</p>
+<p>	/*</p>
+<p>	 * Prepare the argument. Pass a value in the first parameter,</p>
+<p>	 * the remaining three parameters are unused.</p>
+<p>	 */</p>
+<p>	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_VALUE_INPUT,</p>
+<p>					 TEEC_VALUE_INPUT, TEEC_NONE);</p>
+<p>	op.params[0].value.a = (uint32_t)argv[2][0];</p>
+<p>	op.params[1].value.a = atoi(argv[1]);</p>
+<p>	op.params[2].value.a = atoi(argv[3]);</p>
+<p>	/*</p>
+<p>	 * TA_HELLO_WORLD_CMD_INC_VALUE is the actual function in the TA to be</p>
+<p>	 * called.</p>
+<p>	 */</p>
+<p>	printf("Invoking TA to calculate %d %c %d\n", op.params[1].value.a, op.params[2].value.a, (char)op.params[0].value.a);</p>
+<p>	res = TEEC_InvokeCommand(&sess, TA_HELLO_WORLD_CMD_INC_VALUE, &op,</p>
+<p>				 &err_origin);</p>
+<p>	if (res != TEEC_SUCCESS)</p>
+<p>		errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x",</p>
+<p>			res, err_origin);</p>
+<p>	printf("TA operation result: %d\n", op.params[0].value.a);</p>
+<p>	/*</p>
+<p>	 * We're done with the TA, close the session and</p>
+<p>	 * destroy the context.</p>
+<p>	 *</p>
+<p>	 * The TA will print "Goodbye!" in the log when the</p>
+<p>	 * session is closed.</p>
+<p>	 */</p>
+<p>	TEEC_CloseSession(&sess);</p>
+<p>	TEEC_FinalizeContext(&ctx);</p>
+<p>	return 0;</p>
+<p>}</p>
+</code>`<code>
+<li>修改TEE代码：</li>
+</code>`<code>C
+<p>/*</p>
+<p> * Copyright (c) 2016, Linaro Limited</p>
+<p> * All rights reserved.</p>
+<p> *</p>
+<p> * Redistribution and use in source and binary forms, with or without</p>
+<p> * modification, are permitted provided that the following conditions are met:</p>
+<p> *</p>
+<p> * 1. Redistributions of source code must retain the above copyright notice,</p>
+<p> * this list of conditions and the following disclaimer.</p>
+<p> *</p>
+<p> * 2. Redistributions in binary form must reproduce the above copyright notice,</p>
+<p> * this list of conditions and the following disclaimer in the documentation</p>
+<p> * and/or other materials provided with the distribution.</p>
+<p> *</p>
+<p> * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"</p>
+<p> * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE</p>
+<p> * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE</p>
+<p> * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE</p>
+<p> * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR</p>
+<p> * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF</p>
+<p> * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS</p>
+<p> * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN</p>
+<p> * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)</p>
+<p> * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE</p>
+<p> * POSSIBILITY OF SUCH DAMAGE.</p>
+<p> */</p>
+<p>#include <tee_internal_api.h></p>
+<p>#include <tee_internal_api_extensions.h></p>
+<p>#include <hello_ta.h></p>
+<p>/*</p>
+<p> * Called when the instance of the TA is created. This is the first call in</p>
+<p> * the TA.</p>
+<p> */</p>
+<p>TEE_Result TA_CreateEntryPoint(void)</p>
+<p>{</p>
+<p>	DMSG("has been called");</p>
+<p>	return TEE_SUCCESS;</p>
+<p>}</p>
+<p>/*</p>
+<p> * Called when the instance of the TA is destroyed if the TA has not</p>
+<p> * crashed or panicked. This is the last call in the TA.</p>
+<p> */</p>
+<p>void TA_DestroyEntryPoint(void)</p>
+<p>{</p>
+<p>	DMSG("has been called");</p>
+<p>}</p>
+<p>/*</p>
+<p> <em> Called when a new session is opened to the TA. </em>sess_ctx can be updated</p>
+<p> * with a value to be able to identify this session in subsequent calls to the</p>
+<p> * TA. In this function you will normally do the global initialization for the</p>
+<p> * TA.</p>
+<p> */</p>
+<p>TEE_Result TA_OpenSessionEntryPoint(uint32_t param_types,</p>
+<p>		TEE_Param __maybe_unused params[4],</p>
+<p>		void __maybe_unused **sess_ctx)</p>
+<p>{</p>
+<p>	uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_NONE,</p>
+<p>						   TEE_PARAM_TYPE_NONE,</p>
+<p>						   TEE_PARAM_TYPE_NONE,</p>
+<p>						   TEE_PARAM_TYPE_NONE);</p>
+<p>	DMSG("has been called");</p>
+<p>	if (param_types != exp_param_types)</p>
+<p>		return TEE_ERROR_BAD_PARAMETERS;</p>
+<p>	/<em> Unused parameters </em>/</p>
+<p>	(void)&params;</p>
+<p>	(void)&sess_ctx;</p>
+<p>	/*</p>
+<p>	 * The DMSG() macro is non-standard, TEE Internal API doesn't</p>
+<p>	 * specify any means to logging from a TA.</p>
+<p>	 */</p>
+<p>	IMSG("Hello World!\n");</p>
+<p>	/<em> If return value != TEE_SUCCESS the session will not be created. </em>/</p>
+<p>	return TEE_SUCCESS;</p>
+<p>}</p>
+<p>/*</p>
+<p> * Called when a session is closed, sess_ctx hold the value that was</p>
+<p> * assigned by TA_OpenSessionEntryPoint().</p>
+<p> */</p>
+<p>void TA_CloseSessionEntryPoint(void __maybe_unused *sess_ctx)</p>
+<p>{</p>
+<p>	(void)&sess_ctx; /<em> Unused parameter </em>/</p>
+<p>	IMSG("Goodbye!\n");</p>
+<p>}</p>
+<p>static TEE_Result inc_value(uint32_t param_types,</p>
+<p>	TEE_Param params[4])</p>
+<p>{</p>
+<p>	uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,</p>
+<p>						   TEE_PARAM_TYPE_VALUE_INPUT,</p>
+<p>						   TEE_PARAM_TYPE_VALUE_INPUT,</p>
+<p>						   TEE_PARAM_TYPE_NONE);</p>
+<p>	DMSG("has been called");</p>
+<p>	if (param_types != exp_param_types)</p>
+<p>		return TEE_ERROR_BAD_PARAMETERS;</p>
+<p>	char operator = (char)params[0].value.a;</p>
+<p>	IMSG("Got operation: %d %c %d from NW", params[1].value.a, operator, params[2].value.a);</p>
+<p>	if (operator == '+') {</p>
+<p>		params[0].value.a = params[1].value.a + params[2].value.a;</p>
+<p>	} else if (operator == '-') {</p>
+<p>		params[0].value.a = params[1].value.a - params[2].value.a;</p>
+<p>	} else if (operator == '*') {</p>
+<p>		params[0].value.a = params[1].value.a * params[2].value.a;</p>
+<p>	} else if (operator == '/') {</p>
+<p>		params[0].value.a = params[1].value.a / params[2].value.a;</p>
+<p>	} else {</p>
+<p>		IMSG("Unknown operator: %c", operator);</p>
+<p>		return TEE_ERROR_BAD_PARAMETERS;</p>
+<p>	}</p>
+<p>	IMSG("Result of operation is : %d", params[0].value.a);</p>
+<p>	return TEE_SUCCESS;</p>
+<p>}</p>
+<p>static TEE_Result dec_value(uint32_t param_types,</p>
+<p>	TEE_Param params[4])</p>
+<p>{</p>
+<p>	uint32_t exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INOUT,</p>
+<p>						   TEE_PARAM_TYPE_NONE,</p>
+<p>						   TEE_PARAM_TYPE_NONE,</p>
+<p>						   TEE_PARAM_TYPE_NONE);</p>
+<p>	DMSG("has been called");</p>
+<p>	if (param_types != exp_param_types)</p>
+<p>		return TEE_ERROR_BAD_PARAMETERS;</p>
+<p>	IMSG("Got value: %u from NW", params[0].value.a);</p>
+<p>	params[0].value.a--;</p>
+<p>	IMSG("Decrease value to: %u", params[0].value.a);</p>
+<p>	return TEE_SUCCESS;</p>
+<p>}</p>
+<p>/*</p>
+<p> * Called when a TA is invoked. sess_ctx hold that value that was</p>
+<p> * assigned by TA_OpenSessionEntryPoint(). The rest of the paramters</p>
+<p> * comes from normal world.</p>
+<p> */</p>
+<p>TEE_Result TA_InvokeCommandEntryPoint(void __maybe_unused *sess_ctx,</p>
+<p>			uint32_t cmd_id,</p>
+<p>			uint32_t param_types, TEE_Param params[4])</p>
+<p>{</p>
+<p>	(void)&sess_ctx; /<em> Unused parameter </em>/</p>
+<p>	switch (cmd_id) {</p>
+<p>	case TA_HELLO_WORLD_CMD_INC_VALUE:</p>
+<p>		return inc_value(param_types, params);</p>
+<p>	case TA_HELLO_WORLD_CMD_DEC_VALUE:</p>
+<p>		return dec_value(param_types, params);</p>
+<p>	default:</p>
+<p>		return TEE_ERROR_BAD_PARAMETERS;</p>
+<p>	}</p>
+<p>}</p>
+</code>`<code>
+<li>重新编译REE和TEE代码</li>
+</code>`<code>bash
+<p>make -j16</p>
+</code>`<code>
+<li>运行测试</li>
+</code>`<code>bash
+<p>make  -f qemu_v8.mk run-only</p>
+</code>``
+<p>REE:</p>
+<img src="https://github.com/user-attachments/assets/9c87fcc8-2025-438a-a74d-5d7cc029b9f9" alt="Image" style="max-width:100%;">
+<p>TEE:</p>
+<img src="https://github.com/user-attachments/assets/10b1bc46-8d86-42da-bafd-7367f727d53c" alt="Image" style="max-width:100%;">
+<h2>原理</h2>
+<p>OP-TEE的架构下，CA和TA的通信是通过建立会话，会话通过TA UUID标识符来标识，因此同一个OP-TEE OS上，不同的CA/TA通过不同的TA UUID可以和匹配的TA/CA进行通信。</p>
+<h3>REE侧的流程</h3>
+<p>REE侧作为会话发起方，通信流程主要如下：</p>
+<li>初始化上下文 TEEC_InitializeContext</li>
+<li>打开会话 TEEC_OpenSession</li>
+<li>唤醒命令 TEEC_InvokeCommand</li>
+<li> 结束会话 TEEC_CloseSession</li>
+<li>终止上下文 TEEC_FinalizeContext</li>
+<p>其中在一个会话中，可以多次唤醒命令。</p>
+<h3>TEE侧的流程</h3>
+<p>TEE侧也有对应的打开会话、关闭会话和唤醒命令的入口：</p>
+<p>TA_OpenSessionEntryPoint</p>
+<p>TA_CloseSessionEntryPoint</p>
+<p>TA_InvokeCommandEntryPoint</p>
+<p>REE和TEE的对应关系：</p>
+<img src="https://github.com/user-attachments/assets/c11fe20b-301b-419c-9e40-f1ab4da154dc" alt="Image" style="max-width:100%;">
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #113</p>
+    </footer>
+</body>
+</html>

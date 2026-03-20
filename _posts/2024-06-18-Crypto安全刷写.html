@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto]安全刷写 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto]安全刷写</h1>
+    <p class="date">2024-06-18</p>
+    <div class="labels"><span class="label">Cortex-M</span> </div>
+    <hr>
+    <div class="content">
+<p>现代汽车的ECU都普遍支持诊断刷写和FOTA升级，在诊断刷写和FOTA升级中，必须做到安全刷写，否则可能会刷写被篡改的软件，导致ECU被黑，安全刷写可以带来以下有点：</p>
+<li>防止恶意软件注入：未经认证的固件可能包含恶意代码，导致设备被黑客控制或执行未授权的操作。</li>
+<li>保护知识产权：防止未经授权的固件复制和篡改，保护厂商的知识产权。（一般用于软件包加密）</li>
+<li>保证设备稳定性：确保设备只运行经过测试和认证的固件，避免因固件问题导致的设备故障。</li>
+<li>合规性要求：某些行业和应用（如医疗设备、汽车电子）需要遵守严格的安全和合规性标准。</li>
+<p>常见的安全刷写方法采用的是签名，但是由于bare metal的ECU类型计算能力较弱，一般无法验证签名，或者验证签名耗费时间很久。对于这类ECU，可以采用对称加密算法来保证完整性，也就是计算软件包CMAC。以下是固件的制作和刷写过程：</p>
+<img src="https://github.com/robertwenhk/blog/assets/143626366/ca24bef5-f471-44ce-81ed-b138a91e70a5" alt="image" style="max-width:100%;">
+<p>如果既要保证软件包的完整性，又要保护知识产权，建议使用AES-GCM算法加密镜像。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #44</p>
+    </footer>
+</body>
+</html>

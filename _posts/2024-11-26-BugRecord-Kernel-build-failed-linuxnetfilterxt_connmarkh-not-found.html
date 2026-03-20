@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[BugRecord] Kernel build failed: linux/netfilter/xt_connmark.h not found - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[BugRecord] Kernel build failed: linux/netfilter/xt_connmark.h not found</h1>
+    <p class="date">2024-11-26</p>
+    <div class="labels"><span class="label">bug</span> <span class="label">Linux</span> <span class="label">Windows</span> </div>
+    <hr>
+    <div class="content">
+<h1>Problem Summary</h1>
+<p>I initially pushed the source kernel code from my Windows 11 PC to my repository by extracting a tar package of the code and uploading it. However, when I cloned the repository on my Ubuntu machine and tried to build the kernel, I encountered the following error:</p>
+<p>``<code></p>
+<p>net/netfilter/xt_connmark.c:28:41: fatal error: linux/netfilter/xt_connmark.h: No such file or directory</p>
+<p>compilation terminated.</p>
+<p>  LD      net/netfilter/nf_nat.o</p>
+<p>scripts/Makefile.build:258: recipe for target 'net/netfilter/xt_connmark.o' failed</p>
+<p>make[2]: <em>*</em> [net/netfilter/xt_connmark.o] Error 1</p>
+<p>make[2]: <em>*</em> Waiting for unfinished jobs....</p>
+<p>  CC      net/netfilter/ipvs/ip_vs_nfct.o</p>
+<p>  CC      net/netfilter/ipvs/ip_vs_ftp.o</p>
+<p>net/netfilter/xt_hl.c:19:42: fatal error: linux/netfilter_ipv4/ipt_ttl.h: No such file or directory</p>
+<p>compilation terminated.</p>
+</code>`<code>
+<h1>Solution Investigation</h1>
+<p>After several attempts to resolve this issue, I traced the problem back to a behavior specific to Windows. When I extracted the source code on my Windows machine, Windows automatically removed the </code>xt_connmark.h<code> file. This happened because Windows couldn't differentiate between </code>xt_connmark.h<code> and </code>xt_CONNMARK.h` due to case-insensitive file system handling. As a result, Windows discarded one of the files, leading to the compilation error.</p>
+<h1>Conclusion</h1>
+<p>The solution is to <strong>never unzip the code on a Windows machine</strong>. Instead, I need to extract the source code on a Linux machine (like Ubuntu), push it to my remote repository, and clone it again on Ubuntu. This avoids the case-sensitivity issue in Windows and allows the kernel to build properly.</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #76</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Crypto] OAuth2.0 原理初探 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Crypto] OAuth2.0 原理初探</h1>
+    <p class="date">2024-06-13</p>
+    <div class="labels"></div>
+    <hr>
+    <div class="content">
+<h1>什么是OAuth 2.0</h1>
+<p>OAuth2.0是一个用于授权的开放标准协议，它提供了认证授权功能，资源拥有者（服务器）可以基于OAuth2.0有效管理第三方对资源的访问。OAuth2.0是OAuth（Open Authorization）的第二个版本，相比第一个版本，它提供了更好的有效性和用户体验。OAuth 1.0在2006年创立，主要解决了用户在使用第三方应用程序时不得不分享密码的问题，但是由于其使用的是签名密钥和令牌交换机制，过程比较复杂。在2012年，OAuth发布了第二个版本，也就是OAuth2.0，2.0版本简化了OAuth1.0的复杂性，采用了基于<a href="https://datatracker.ietf.org/doc/html/rfc6750">Bearer Token</a>的授权模式。此外，OAuth2.0还提供了更为灵活的授权模式：授权码模式、隐式授权模式、资源所有者密码凭证模式和客户端凭证模式。</p>
+<h1>为什么要有OAuth</h1>
+<p>会有人有疑问，我们现在可以用TLS、密码认证等机制做授权保护，为什么还要有OAuth？在传统的CS（Client-Server）模型中，如果客户端要访问服务端的访问限制资源，那就必须要有服务端的凭证（Credentials）。如果有多个客户端，那么服务端就不得不和多个客户端共享访问凭证，同时也引入了一些安全隐患和限制：</p>
+<p>* 第三方客户端必须有能力安全存储服务端的凭证，并且如果将来有访问需求，就必须提前存储服务端的凭证，典型的凭证是密码；</p>
+<p>* 服务端需要提供密码认证机制，尽管密钥认证现在已经公认是一个弱认证机制；</p>
+<p>* 客户端几乎获得了等同于服务端（资源所有者）的所有权限，权限过大会导致各种各样的问题和隐患；</p>
+<p>* 服务端一旦释放权限给某个客户端，就无法回收访问权限；</p>
+<p>* 对客户端的入侵将导致整个服务端资源的泄漏。</p>
+<p>另一个问题，TLS提供的是通信信道的安全性，本身不具备任何授权管理能力，因此也无法解决上述的一些问题。</p>
+<h1>OAuth2.0如何实现授权管理</h1>
+<p>在研究OAuth2.0如何解决认证授权问题之前，我们先看一看传统CS模型：</p>
+<img width="441" alt="image" src="https://github.com/robertwenhk/blog/assets/143626366/456bfe0b-0179-4fa4-8920-f9c945cdfeab">
+<p>传统的CS模型中，认证和授权可能都发生在服务器端，潜在的问题和限制上面已经列举了。为了解决上述问题，OAuth2.0 引入了一个中间层，把客户端和资源所有者的角色区分开。在OAuth的解决方案中，资源所有者和资源管理者是不同的概念，服务器是资源的管理者，被资源所有者授权对资源进行管理；而客户端必须拥有资源所有者颁发的token才能去资源管理者--服务器那进行资源访问。</p>
+<p>客户端获取的token实际上是一个字符串，不再是传统CS架构的credentials。这个字符串包含了访问的范围、token的有效期以及访问的属性等。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #42</p>
+    </footer>
+</body>
+</html>

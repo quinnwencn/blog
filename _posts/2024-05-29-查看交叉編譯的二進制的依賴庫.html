@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查看交叉編譯的二進制的依賴庫 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>查看交叉編譯的二進制的依賴庫</h1>
+    <p class="date">2024-05-29</p>
+    <div class="labels"><span class="label">交叉编译</span> </div>
+    <hr>
+    <div class="content">
+<p>在一個項目中，我需要交叉編譯一些so和一些可執行文件，二進制交付到對方的倉庫。但是在交付後，嵌入式板子上執行可執行文件發現報錯 <code>not found</code>，由於板子的精簡，可讀信息不明顯，但是推測應該是少了so。但是目標板上沒有ldd，無法直接查看，因此記錄下我找到的查看交叉編譯可執行文件的依賴庫的方法。</p>
+<li>交叉編譯器的readelf</li>
+<p>``<code></p>
+<p>arm-oe-linux-gnueabi-readelf -a exec_binary | grep "SHARED"</p>
+</code>`<code>
+<li>編譯主機的readelf</li>
+</code>`<code>
+<p> readelf -a  exec_binary | grep "SHARED"</p>
+</code>``
+<p>兩者效果一樣，選擇其中一個即可：</p>
+<img src="https://github.com/robertwenhk/blog/assets/143626366/38eb02fe-3ce7-4367-8cdd-32915354a780" alt="image" style="max-width:100%;">
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #34</p>
+    </footer>
+</body>
+</html>

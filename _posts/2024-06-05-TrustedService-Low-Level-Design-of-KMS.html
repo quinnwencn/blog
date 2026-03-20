@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[TrustedService] Low Level Design of KMS - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[TrustedService] Low Level Design of KMS</h1>
+    <p class="date">2024-06-05</p>
+    <div class="labels"><span class="label">KMS</span> <span class="label">Low Level</span> </div>
+    <hr>
+    <div class="content">
+<p>High Level可以參考<a href="https://github.com/robertwenhk/blog/issues/36">High Level Design of KMS</a>，這裏負責將KMS的Low Level設計。</p>
+<h1>1.組建設計細化</h1>
+<h2>1.1 API </h2>
+<p>KMS需要提供密鑰生成、密鑰查詢、密鑰更新、密鑰刪除、數據加密和數據揭秘功能，每個功能應單獨設立一個API</p>
+<p>* 密鑰生成：POST /keys</p>
+<p>* 密鑰查詢：GET /keys/query</p>
+<p>* 密鑰更新：POST /keys/update</p>
+<p>* 密鑰刪除：DELETE /keys/delete</p>
+<p>* 數據加密：POST /encrypt</p>
+<p>* 數據解密：POST /decrypt</p>
+<h2>1.2 API請求與響應</h2>
+<h3>1.1 密鑰生成</h3>
+<p>* 請求：POST /keys</p>
+<p>``<code>json</p>
+<p>{</p>
+<p>    "keyType": "AES/RSA/ECC",</p>
+<p>    "keySize": "128/1026/prime256v1",</p>
+<p>}</p>
+</code>`<code>
+<p>* 響應：</p>
+</code>`<code>json
+<p>{</p>
+<p>    "keyId": "cb7a45c7-147d-4f9a-a283-2c40dd0d0837",</p>
+<p>    "publicKey": "(optional)",</p>
+<p>}</p>
+</code>`<code>
+<h3>1.2 密鑰查詢</h3>
+<p>* 請求：GET /keys/query</p>
+</code>`<code>json
+<p>{</p>
+<p>    "keyId": "cb7a45c7-147d-4f9a-a283-2c40dd0d0837"</p>
+<p>}</p>
+</code>`<code>
+<p>* 響應</p>
+</code>`<code>json
+<p>{</p>
+<p>   "exist": true </p>
+<p>}</p>
+</code>`<code>
+<h3>1.3 密鑰更新 POST /keys/update</h3>
+<p>* 請求</p>
+</code>`<code>json
+<p>{</p>
+<p>    "keyId": "cb7a45c7-147d-4f9a-a283-2c40dd0d0837"</p>
+<p>}</p>
+</code>`<code>
+<p>* 響應</p>
+</code>`<code>json
+<p>{</p>
+<p>    "status": 1 (success), 0(failed)</p>
+<p>}</p>
+</code>`<code>
+<h3>1.4 密鑰刪除 DELETE /keys/delete</h3>
+<p>* 請求</p>
+</code>`<code>json
+<p>{</p>
+<p>    "keyId": "cb7a45c7-147d-4f9a-a283-2c40dd0d0837"</p>
+<p>}</p>
+</code>`<code>
+<p>* 響應</p>
+</code>`<code>json
+<p>{</p>
+<p>    "status": 1 (success), 0(failed)</p>
+<p>}</p>
+</code>`<code>
+<h3>1.5 數據加密 POST /encrypt</h3>
+<p>* 請求</p>
+</code>`<code>json
+<p>{</p>
+<p>    "keyId": "cb7a45c7-147d-4f9a-a283-2c40dd0d0837",</p>
+<p>    "plainText": "fsagdsagdgdgggd",</p>
+<p>}</p>
+</code>`<code>
+<p>* 響應</p>
+</code>`<code>json
+<p>{</p>
+<p>    "status": 1 (success), 0(failed),</p>
+<p>    "cipherText": "gfsagdgsd"</p>
+<p>}</p>
+</code>`<code>
+<h3>1.6 數據解密 POST /decrypt</h3>
+<p>* 請求</p>
+</code>`<code>json
+<p>{</p>
+<p>    "keyId": "cb7a45c7-147d-4f9a-a283-2c40dd0d0837",</p>
+<p>    "cipherText": "fsagdsagdgdgggd",</p>
+<p>}</p>
+</code>`<code>
+<p>* 響應</p>
+</code>`<code>json
+<p>{</p>
+<p>    "status": 1 (success), 0(failed),</p>
+<p>    "plainText": "gfsagdgsd"</p>
+<p>}</p>
+</code>``
+<h2>1.2 身份驗證和授權</h2>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #37</p>
+    </footer>
+</body>
+</html>

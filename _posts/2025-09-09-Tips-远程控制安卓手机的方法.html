@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Tips] 远程控制安卓手机的方法 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Tips] 远程控制安卓手机的方法</h1>
+    <p class="date">2025-09-09</p>
+    <div class="labels"></div>
+    <hr>
+    <div class="content">
+<p>远程控制安卓手机的方法有很多种，一种是使用ToDesk、向日葵等远程工具，但这种方式需要付费，并且需要确保手机在长时间锁屏下不杀死对应后台；另一种免费的方式是通过adb + scrcpy的方式实现windows、mac、linux甚至是iphone控制安卓手机，本文将介绍如何使用scrcpy完成远程控制安卓手机。</p>
+<h1>手机开启USB调试</h1>
+<p>scrcpy控制手机的底层原理要用到adb，因此必须要将手机的USB调试或者无线调试的开关打开，方法是：</p>
+<p>先进入开发者模式：</p>
+<li>手机进入设置</li>
+<li>找到关于本机</li>
+<li>版本信息</li>
+<li>多次点击版本号</li>
+<p>打开USB调试：</p>
+<li>设置</li>
+<li>系统与更新</li>
+<li>开发者选项</li>
+<li>打开USB调试</li>
+<p>不同手机会有一些差异，需要根据手机型号和系统来处理。</p>
+<h1>adb打开网络调试</h1>
+<p>电脑安装<a href="https://github.com/Genymobile/scrcpy/releases">scrcpy工具（自带adb）</a>，将解压后的路径增加到环境变量Path中</p>
+<img width="742" height="461" alt="Image" src="https://github.com/user-attachments/assets/50eb227b-fa86-41c3-9035-28f54e4de3a9" />
+<p>右键打开命令行，首先通过<code>adb devices</code>确认链接手机：</p>
+<img width="718" height="86" alt="Image" src="https://github.com/user-attachments/assets/c054a8ea-c0fa-4d3b-acc1-6eab40cbd1aa" />
+<p>连接后，如果device显示的是unauthorized，需要在手机端弹窗允许调试。正常查看到手机的UUID和device后，通过以下命令打开网络调试：</p>
+<p>``<code>bash</p>
+<p>adb tcpip [port num]</p>
+<h1>example: adb tcpip 10086</h1>
+</code>`<code>
+<p>验证开启：手机和电脑连接同一网络，然后通过</code>adb connect<code>命令测试连接：</p>
+</code>`<code>bash
+<p>adb connect 192.168.1.99(phone ip):10086</p>
+</code>`<code>
+<p>连接后直接电脑端运行scrcpy即可控制手机：</p>
+<img width="1244" height="640" alt="Image" src="https://github.com/user-attachments/assets/69ca21ff-d352-46d0-aa93-7c12fb10ae2b" />
+<h1>iphone实现远程控制安卓手机</h1>
+<p>上述例子中电脑控制安卓手机，电脑和手机都处于同一网络内（局域网），这也是adb网络调试的条件，scrcpy实现远程控制手机也必须控制手机和被控手机同处于一个网络。一种可行的方式就是使用tailscale VPN，免费版本可以支持100个设备同处于一个局域网，也解决了手机同处一个网络的问题。</p>
+<p>安卓手机和iphone需要使用同一个账号登录，否则两者不处于一个局域网，无法远程控制。</p>
+<p>安装tailscale后，还需要就可以通过scrcpy远程控制安卓手机，详细步骤如下：</p>
+<li>iphone下载</code>scrcpy remote<code>（目前需要付费购买）</li>
+<li>安卓手机打开无线调试（方法同USB调试）</li>
+<li>iphone打开</code>safari<code>浏览器，输入</code>scrcpy2://adb<code>，打开</code>scrcpy remote<code>的</code>advanced mode`</li>
+<li>输入ip和adb端口10086，即可连接</li>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #123</p>
+    </footer>
+</body>
+</html>

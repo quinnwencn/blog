@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[RustLearning] match的使用 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[RustLearning] match的使用</h1>
+    <p class="date">2024-06-06</p>
+    <div class="labels"><span class="label">Rust</span> </div>
+    <hr>
+    <div class="content">
+<p>在Rust中，match是一個非常便利的語法，使用得當可以大大減少代碼複雜度，也方便閱讀。match的使用主要以以下幾個場景爲主：</p>
+<li>匹配枚舉值</li>
+<p>``<code>Rust</p>
+<p>#[derive(Debug)] // so we can inspect the state in a minute</p>
+<p>enum UsState {</p>
+<p>    Alabama,</p>
+<p>    Alaska,</p>
+<p>    // --snip--</p>
+<p>}</p>
+<p>enum Coin {</p>
+<p>    Penny,</p>
+<p>    Nickel,</p>
+<p>    Dime,</p>
+<p>    Quarter(UsState),</p>
+<p>}</p>
+<p>fn value_in_cents(coin: Coin) -> u8 {</p>
+<p>    match coin {</p>
+<p>        Coin::Penny => 1,</p>
+<p>        Coin::Nickel => 5,</p>
+<p>        Coin::Dime => 10,</p>
+<p>        Coin::Quarter(state) => {</p>
+<p>            println!("State quarter from {:?}!", state);</p>
+<p>            25</p>
+<p>        }</p>
+<p>    }</p>
+<p>}</p>
+</code>`<code>
+<li>匹配Option<T></li>
+</code>`<code>Rust
+<p>    fn plus_one(x: Option<i32>) -> Option<i32> {</p>
+<p>        match x {</p>
+<p>            None => None,</p>
+<p>            Some(i) => Some(i + 1),</p>
+<p>        }</p>
+<p>    }</p>
+<p>    let five = Some(5);</p>
+<p>    let six = plus_one(five);</p>
+<p>    let none = plus_one(None);</p>
+</code>`<code>
+<li>匹配常量</li>
+</code>`<code>Rust
+<p>    let dice_roll = 9;</p>
+<p>    match dice_roll {</p>
+<p>        3 => add_fancy_hat(),</p>
+<p>        7 => remove_fancy_hat(),</p>
+<p>        other => move_player(other),</p>
+<p>    }</p>
+<p>    fn add_fancy_hat() {}</p>
+<p>    fn remove_fancy_hat() {}</p>
+<p>    fn move_player(num_spaces: u8) {}</p>
+</code>`<code>
+<p>使用match有一個限製：必須覆蓋所有分支！上述例子中無論是枚舉、Option<T>還是常量，都覆蓋了所有分支，對於其他分支，通常是使用下劃線</code>_<code>標識，表示其餘所有情況。在匹配變量時，有一種用法，結合if語句使用：</p>
+</code>`<code>Rust
+<p>fn print_according_to_len(n: u16) -> String {</p>
+<p>    match n {</p>
+<p>        t if t % 3 == 0 ==> format!("{} can be divided by 3", t),</p>
+<p>        t if t % 5 == 0 ==> format!("{} can be divided by 5", t),</p>
+<p>        _ => format!("{} can''t  be divided by either 3 or 5", t),</p>
+<p>    }</p>
+<p>}</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #38</p>
+    </footer>
+</body>
+</html>

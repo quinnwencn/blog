@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[Tips] Setup static IP address for Ethernet interface in Linux - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[Tips] Setup static IP address for Ethernet interface in Linux</h1>
+    <p class="date">2024-12-04</p>
+    <div class="labels"><span class="label">Linux</span> <span class="label">Config</span> </div>
+    <hr>
+    <div class="content">
+<p>For operating systems  that use Netplan to manage the network settings, you can easily configure a  static IP address for an Ethernet interface by adding the appropriate settings in the <code>/etc/netplan/01-network-manager-all.yaml</code> file.</p>
+<p>Original config:</p>
+<p>``<code>bash</p>
+<p>#Let NetworkManager manage all devices on this system</p>
+<p>network:</p>
+<p>  version: 2</p>
+<p>  renderer: NetworkManager</p>
+</code>`<code>
+<p>Add a configuration for an interface:</p>
+</code>`<code>bash
+<h1>Let NetworkManager manage all devices on this system</h1>
+<p>network:</p>
+<p>  version: 2</p>
+<p>  renderer: NetworkManager</p>
+<p>  ethernets:</p>
+<p>    enxf8e43b4f721f:</p>
+<p>      dhcp4: no</p>
+<p>      addresses: [192.168.18.100/20]</p>
+<p>      gateway4: 192.168.18.1</p>
+<p>      nameservers:</p>
+<p>        addresses: [8.8.8.8,8.8.8.4]</p>
+</code>`<code>
+<p>Run </code>sudo netplan try<code> and enter </code>Enter` to make configuration works.</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #81</p>
+    </footer>
+</body>
+</html>

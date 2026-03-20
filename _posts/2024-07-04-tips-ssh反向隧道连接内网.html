@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[tips] ssh反向隧道连接内网 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[tips] ssh反向隧道连接内网</h1>
+    <p class="date">2024-07-04</p>
+    <div class="labels"><span class="label">ssh</span> </div>
+    <hr>
+    <div class="content">
+<p>需要访问内网或者家里的PC等没有公网IP的电脑时，除了安装teamviewer等商用软件外，其实还可以通过ssh反向隧道连接，依赖是一个公网IP的服务器。我们举例家里有一台电脑A，有一个公网服务器B，然后希望在另外的地方通过电脑C连接电脑A。我们可以通过A主动连接到公网电脑B，然后通过公网电脑B建立一个端口转发，从而使得C可以通过公网电脑B访问电脑A。</p>
+<p>具体步骤如下：</p>
+<li>在电脑A上建立反向SSH隧道</li>
+<p>``<code>bash</p>
+<p>ssh -p 10000 -R 2222:localhost:22 userB@ip_of_pcB</p>
+</code>`<code>
+<p>这里的参数解释如下：</p>
+<p>* -p 10000：指定端口B的ssh端口是10000，如果没有修改过配置，应该是22</p>
+<p>* -R 2222:localhost:22：将服务器B的2222端口转发到电脑A的22端口</p>
+<p>* userB@ip_of_pcB：连接电脑B的用户名和公网ip地址</p>
+<li>在电脑C上通过公网服务器B转发数据</li>
+</code>`<code>bash
+<p>ssh -p 10000 -L 3333:localhost:2222 userB@ip_of_pcB</p>
+</code>`<code>
+<p>参数解释：</p>
+<p>* -p 10000：与步骤1相同</p>
+<p>* -L 3333:localhost:2222：将电脑C的本地端口3333转发到服务器B的2222端口</p>
+<p>* userB@ip_of_pcB：与步骤1相同</p>
+<li>通过电脑C连接电脑A：</li>
+</code>`<code>bash
+<p>ssh -p 3333 userA@localhost</p>
+</code>``
+<p>PS：如果服务器B开启了非对称密钥验证，那么步骤1和2需要通过-i选项选择本地的私钥，前提是已经把电脑A和C的ssh公钥拷贝到服务器B上</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #52</p>
+    </footer>
+</body>
+</html>

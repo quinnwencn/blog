@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMake执行命令 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>CMake执行命令</h1>
+    <p class="date">2024-05-15</p>
+    <div class="labels"><span class="label">CMake</span> </div>
+    <hr>
+    <div class="content">
+<p>在一些编译场景中，我们需要在编译前执行一些shell命令，这在Makefile中是非常常见的，但在CMake中很少涉及。CMake中执行命令常用的有：</p>
+<li>execute_process</li>
+<li>add_custom_command</li>
+<p>这里介绍下execute_process的使用方法：</p>
+<h1><code>execute_process</code></h1>
+<p><code>execute_process</code>可以执行一个或者多个进程，它的定义为：</p>
+<p>``<code></p>
+<p>execute_process(COMMAND <cmd1> [args1...]]</p>
+<p>                [COMMAND <cmd2> [args2...] [...]]</p>
+<p>                [WORKING_DIRECTORY <directory>]</p>
+<p>                [TIMEOUT <seconds>]</p>
+<p>                [RESULT_VARIABLE <variable>]</p>
+<p>                [OUTPUT_VARIABLE <variable>]</p>
+<p>                [ERROR_VARIABLE <variable>]</p>
+<p>                [INPUT_FILE <file>]</p>
+<p>                [OUTPUT_FILE <file>]</p>
+<p>                [ERROR_FILE <file>]</p>
+<p>                [OUTPUT_QUIET]</p>
+<p>                [ERROR_QUIET]</p>
+<p>                [OUTPUT_STRIP_TRAILING_WHITESPACE]</p>
+<p>                [ERROR_STRIP_TRAILING_WHITESPACE])</p>
+</code>`<code>
+<p>其中：</p>
+<p>* COMMAND: 需要执行的命令，有多个命令，则可以通过多个COMMAND参数执行；</p>
+<p>* WORKING_DIRECTORY：命令执行的目录，效果类似于</code>cd WORKING_DIRECTORY && COMMAND<code>;</p>
+<p>* TIMEOUT: 命令执行的超时时间，如果在超时时间还没结束，命令进程将被结束</p>
+<p>* RESULT_VARIABLE：命令的执行结果将存储在该参数中，可能是进程的返回参数，类型为int，也可能是错误的提示字符串；</p>
+<p>* OUTPUT_VARIABLE： 命令执行的标准输出；</p>
+<p>* ERROR_VARIABLE： 命令执行的错误输出；</p>
+<p>* INPUT_FILE, OUTPUT_FILE, ERROR_FILE：第一个进程的输入是INPUT_FILE，最后一个进程的输出在OUTPUT_FILE，所有进程的错误信息都会输出在ERROR_FILE；</p>
+<p>* OUTPUT_QUIET，ERROR_QUIET：忽略输出和错误；</p>
+<p>* OUTPUT_STRIP_TRAILING_WHITESPACE和ERROR_STRIP_TRAILING_WHITESPACE：未找到含义</p>
+<p>下面，我展示几个简单的例子，说明如何使用，但不会涵盖所有参数：</p>
+</code>`<code>
+<p>execute_process(COMMAND rm -rf test_file WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})</p>
+<p>execute_process(COMMAND mkdir test_file WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})</p>
+<p>execute_process(COMMAND openssl genrsa -out root.key 2048</p>
+<p>                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test_file</p>
+<p>                TIMEOUT 5)</p>
+</code>`<code>
+<p>对于产生文件后，需要在代码中引用，可也通过</code>target_compile_definitions<code>为代码中引入宏定义：</p>
+</code>`<code>
+<p>target_compile_definitions( target PUBLIC  MACRO_DEFINE="xxx")</p>
+</code>`<code>
+<p>例子：</p>
+</code>`<code>
+<p>target_compile_definitions(auth_test PUBLIC </p>
+<p>    ROOT_KEY="${CMAKE_CURRENT_SOURCE_DIR}/test_file/root.key")</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #30</p>
+    </footer>
+</body>
+</html>

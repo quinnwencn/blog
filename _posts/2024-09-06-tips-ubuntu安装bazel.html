@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[tips] ubuntu安装bazel - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[tips] ubuntu安装bazel</h1>
+    <p class="date">2024-09-06</p>
+    <div class="labels"><span class="label">Ubuntu</span> </div>
+    <hr>
+    <div class="content">
+<li>增加bazel的apt源</li>
+<p>``<code>bash</p>
+<p>echo "deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list</p>
+<p>curl https://bazel.build/bazel-release.pub.gpg | sudo apt-key add -</p>
+</code>`<code>
+<li>使用apt 安装bazel</li>
+</code>`<code>bash
+<p>sudo apt update && sudo apt install bazel</p>
+</code>`<code>
+<li>升级到最新版本</li>
+</code>`<code>bash
+<p>sudo apt upgrade bazel</p>
+</code>``
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #68</p>
+    </footer>
+</body>
+</html>

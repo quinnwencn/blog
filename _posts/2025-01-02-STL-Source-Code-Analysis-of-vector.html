@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of vector - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of vector</h1>
+    <p class="date">2025-01-02</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> <span class="label">SGI</span> </div>
+    <hr>
+    <div class="content">
+<h1><code>vector</code>源码</h1>
+<p><code>vector</code>的源码分析仍然是SGI的<code>vector</code>，我们来看<code>vector</code>的定义：</p>
+<p>``<code>Cpp</p>
+<p>template <class _Tp, class _Alloc = __STL_DEFAULT_ALLOCATOR(_Tp) ></p>
+<p>class vector : protected _Vector_base<_Tp, _Alloc> </p>
+<p>{</p>
+<p>  // requirements:</p>
+<p>  __STL_CLASS_REQUIRES(_Tp, _Assignable);</p>
+<p>private:</p>
+<p>  typedef _Vector_base<_Tp, _Alloc> _Base;</p>
+<p>public:</p>
+<p>  // vector 的嵌套类型定义</p>
+<p>  typedef _Tp value_type;</p>
+<p>  typedef value_type* pointer;</p>
+<p>  typedef const value_type* const_pointer;</p>
+<p>  typedef value_type* iterator;   // vector的迭代器是普通指针</p>
+<p>  typedef const value_type* const_iterator;</p>
+<p>  typedef value_type& reference;</p>
+<p>  typedef const value_type& const_reference;</p>
+<p>  typedef size_t size_type;</p>
+<p>  typedef ptrdiff_t difference_type;</p>
+<p>  typedef typename _Base::allocator_type allocator_type;</p>
+<p>  allocator_type get_allocator() const { return _Base::get_allocator(); }</p>
+<p>#ifdef __STL_CLASS_PARTIAL_SPECIALIZATION</p>
+<p>  typedef reverse_iterator<const_iterator> const_reverse_iterator;</p>
+<p>  typedef reverse_iterator<iterator> reverse_iterator;</p>
+<p>#else /<em> __STL_CLASS_PARTIAL_SPECIALIZATION </em>/</p>
+<p>  typedef reverse_iterator<const_iterator, value_type, const_reference, </p>
+<p>                           difference_type>  const_reverse_iterator;</p>
+<p>  typedef reverse_iterator<iterator, value_type, reference, difference_type></p>
+<p>          reverse_iterator;</p>
+<p>#endif /<em> __STL_CLASS_PARTIAL_SPECIALIZATION </em>/</p>
+<p>protected:</p>
+<p>#ifdef __STL_HAS_NAMESPACES</p>
+<p>  using _Base::_M_allocate;</p>
+<p>  using _Base::_M_deallocate;</p>
+<p>  using _Base::_M_start;   // 表示目前使用的空间头</p>
+<p>  using _Base::_M_finish;  // 表示目前使用的空间尾</p>
+<p>  using _Base::_M_end_of_storage;   // 表示目前可用的空间的尾</p>
+<p>#endif /<em> __STL_HAS_NAMESPACES </em>/</p>
+<p>protected:</p>
+<p>  void _M_insert_aux(iterator __position, const _Tp& __x);  // 非常重要的成员函数</p>
+<p>  void _M_insert_aux(iterator __position);  // 这个也是，只不过是调用默认构造函数</p>
+<p>public:</p>
+<p>  iterator begin() { return _M_start; }  // begin使用的就是_Vector_base的_M_start</p>
+<p>  const_iterator begin() const { return _M_start; }</p>
+<p>  iterator end() { return _M_finish; } // end使用的就是_Vector_base的_M_finish</p>
+<p>  const_iterator end() const { return _M_finish; }</p>
+<p>  reverse_iterator rbegin()</p>
+<p>    { return reverse_iterator(end()); }</p>
+<p>  const_reverse_iterator rbegin() const</p>
+<p>    { return const_reverse_iterator(end()); }</p>
+<p>  reverse_iterator rend()</p>
+<p>    { return reverse_iterator(begin()); }</p>
+<p>  const_reverse_iterator rend() const</p>
+<p>    { return const_reverse_iterator(begin()); }</p>
+<p>  size_type size() const</p>
+<p>    { return size_type(end() - begin()); }</p>
+<p>  size_type max_size() const</p>
+<p>    { return size_type(-1) / sizeof(_Tp); }</p>
+<p>  size_type capacity() const</p>
+<p>    { return size_type(_M_end_of_storage - begin()); }  // 使用申请时的尾部内存地址减去其实地址</p>
+<p>  bool empty() const</p>
+<p>    { return begin() == end(); }</p>
+<p>  reference operator[](size_type __n) { return *(begin() + __n); }</p>
+<p>  const_reference operator[](size_type __n) const { return *(begin() + __n); }</p>
+<p>#ifdef __STL_THROW_RANGE_ERRORS</p>
+<p>  void _M_range_check(size_type __n) const {</p>
+<p>    if (__n >= this->size())</p>
+<p>      __stl_throw_range_error("vector");</p>
+<p>  }</p>
+<p>  reference at(size_type __n)  // at会检查是否越界</p>
+<p>    { _M_range_check(__n); return (*this)[__n]; }</p>
+<p>  const_reference at(size_type __n) const</p>
+<p>    { _M_range_check(__n); return (*this)[__n]; }</p>
+<p>#endif /<em> __STL_THROW_RANGE_ERRORS </em>/</p>
+<p>  explicit vector(const allocator_type& __a = allocator_type())</p>
+<p>    : _Base(__a) {}</p>
+<p>  vector(size_type __n, const _Tp& __value,</p>
+<p>         const allocator_type& __a = allocator_type()) </p>
+<p>    : _Base(__n, __a)</p>
+<p>    { _M_finish = uninitialized_fill_n(_M_start, __n, __value); }</p>
+<p>  explicit vector(size_type __n)</p>
+<p>    : _Base(__n, allocator_type())</p>
+<p>    { _M_finish = uninitialized_fill_n(_M_start, __n, _Tp()); }</p>
+<p>  vector(const vector<_Tp, _Alloc>& __x) </p>
+<p>    : _Base(__x.size(), __x.get_allocator())</p>
+<p>    { _M_finish = uninitialized_copy(__x.begin(), __x.end(), _M_start); }</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  // Check whether it's an integral type.  If so, it's not an iterator.</p>
+<p>  template <class _InputIterator></p>
+<p>  vector(_InputIterator __first, _InputIterator __last,</p>
+<p>         const allocator_type& __a = allocator_type()) : _Base(__a) {</p>
+<p>    typedef typename _Is_integer<_InputIterator>::_Integral _Integral;</p>
+<p>    _M_initialize_aux(__first, __last, _Integral());</p>
+<p>  }</p>
+<p>  template <class _Integer></p>
+<p>  void _M_initialize_aux(_Integer __n, _Integer __value, __true_type) {</p>
+<p>    _M_start = _M_allocate(__n);</p>
+<p>    _M_end_of_storage = _M_start + __n; </p>
+<p>    _M_finish = uninitialized_fill_n(_M_start, __n, __value);</p>
+<p>  }</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_initialize_aux(_InputIterator __first, _InputIterator __last,</p>
+<p>                         __false_type) {</p>
+<p>    _M_range_initialize(__first, __last, __ITERATOR_CATEGORY(__first));</p>
+<p>  }</p>
+<p>#else</p>
+<p>  vector(const _Tp<em> __first, const _Tp</em> __last,</p>
+<p>         const allocator_type& __a = allocator_type())</p>
+<p>    : _Base(__last - __first, __a) </p>
+<p>    { _M_finish = uninitialized_copy(__first, __last, _M_start); }</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  ~vector() { destroy(_M_start, _M_finish); }   // 全局函数，之前的Alloc分析里有讲到过，根据是否trivial进行不同的析构， 释放内存由_Vector_base的析构函数完成</p>
+<p>  vector<_Tp, _Alloc>& operator=(const vector<_Tp, _Alloc>& __x);</p>
+<p>  void reserve(size_type __n) {</p>
+<p>    if (capacity() < __n) {</p>
+<p>      const size_type __old_size = size();</p>
+<p>      iterator __tmp = _M_allocate_and_copy(__n, _M_start, _M_finish);</p>
+<p>      destroy(_M_start, _M_finish);</p>
+<p>      _M_deallocate(_M_start, _M_end_of_storage - _M_start);</p>
+<p>      _M_start = __tmp;</p>
+<p>      _M_finish = __tmp + __old_size;</p>
+<p>      _M_end_of_storage = _M_start + __n;</p>
+<p>    }</p>
+<p>  }</p>
+<p>  // assign(), a generalized assignment member function.  Two</p>
+<p>  // versions: one that takes a count, and one that takes a range.</p>
+<p>  // The range version is a member template, so we dispatch on whether</p>
+<p>  // or not the type is an integer.</p>
+<p>  void assign(size_type __n, const _Tp& __val) { _M_fill_assign(__n, __val); }</p>
+<p>  void _M_fill_assign(size_type __n, const _Tp& __val);</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _InputIterator></p>
+<p>  void assign(_InputIterator __first, _InputIterator __last) {</p>
+<p>    typedef typename _Is_integer<_InputIterator>::_Integral _Integral;</p>
+<p>    _M_assign_dispatch(__first, __last, _Integral());</p>
+<p>  }</p>
+<p>  template <class _Integer></p>
+<p>  void _M_assign_dispatch(_Integer __n, _Integer __val, __true_type)</p>
+<p>    { _M_fill_assign((size_type) __n, (_Tp) __val); }</p>
+<p>  template <class _InputIter></p>
+<p>  void _M_assign_dispatch(_InputIter __first, _InputIter __last, __false_type)</p>
+<p>    { _M_assign_aux(__first, __last, __ITERATOR_CATEGORY(__first)); }</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_assign_aux(_InputIterator __first, _InputIterator __last,</p>
+<p>                     input_iterator_tag);</p>
+<p>  template <class _ForwardIterator></p>
+<p>  void _M_assign_aux(_ForwardIterator __first, _ForwardIterator __last,</p>
+<p>                     forward_iterator_tag); </p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  reference front() { return *begin(); }  // 第一个元素</p>
+<p>  const_reference front() const { return *begin(); }</p>
+<p>  reference back() { return *(end() - 1); } // 最后一个元素</p>
+<p>  const_reference back() const { return *(end() - 1); }</p>
+<p>  void push_back(const _Tp& __x) {</p>
+<p>    if (_M_finish != _M_end_of_storage) {  // 首先判断是否空间已满</p>
+<p>      construct(_M_finish, __x);  // 空间不满，直接在_M_finish的地方构造一个，这里会执行拷贝构造，然后递增_M_finish</p>
+<p>      ++_M_finish;</p>
+<p>    }</p>
+<p>    else  // 满了，得执行插入操作，会涉及拷贝内存</p>
+<p>      _M_insert_aux(end(), __x);</p>
+<p>  }</p>
+<p>  void push_back() {  // 之前一直不知道还有输入为空的push_back</p>
+<p>    if (_M_finish != _M_end_of_storage) {</p>
+<p>      construct(_M_finish);  // 还有空间，就在末尾构造一个</p>
+<p>      ++_M_finish;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_insert_aux(end());</p>
+<p>  }</p>
+<p>  void swap(vector<_Tp, _Alloc>& __x) {</p>
+<p>    __STD::swap(_M_start, __x._M_start);</p>
+<p>    __STD::swap(_M_finish, __x._M_finish);</p>
+<p>    __STD::swap(_M_end_of_storage, __x._M_end_of_storage);</p>
+<p>  }</p>
+<p>  iterator insert(iterator __position, const _Tp& __x) {</p>
+<p>    size_type __n = __position - begin();</p>
+<p>    if (_M_finish != _M_end_of_storage && __position == end()) {</p>
+<p>      construct(_M_finish, __x);</p>
+<p>      ++_M_finish;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_insert_aux(__position, __x);</p>
+<p>    return begin() + __n;</p>
+<p>  }</p>
+<p>  iterator insert(iterator __position) {</p>
+<p>    size_type __n = __position - begin();</p>
+<p>    if (_M_finish != _M_end_of_storage && __position == end()) {</p>
+<p>      construct(_M_finish);</p>
+<p>      ++_M_finish;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_insert_aux(__position);</p>
+<p>    return begin() + __n;</p>
+<p>  }</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  // Check whether it's an integral type.  If so, it's not an iterator.</p>
+<p>  template <class _InputIterator></p>
+<p>  void insert(iterator __pos, _InputIterator __first, _InputIterator __last) {</p>
+<p>    typedef typename _Is_integer<_InputIterator>::_Integral _Integral;</p>
+<p>    _M_insert_dispatch(__pos, __first, __last, _Integral());</p>
+<p>  }</p>
+<p>  template <class _Integer></p>
+<p>  void _M_insert_dispatch(iterator __pos, _Integer __n, _Integer __val,</p>
+<p>                          __true_type)</p>
+<p>    { _M_fill_insert(__pos, (size_type) __n, (_Tp) __val); }</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_insert_dispatch(iterator __pos,</p>
+<p>                          _InputIterator __first, _InputIterator __last,</p>
+<p>                          __false_type) {</p>
+<p>    _M_range_insert(__pos, __first, __last, __ITERATOR_CATEGORY(__first));</p>
+<p>  }</p>
+<p>#else /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void insert(iterator __position,</p>
+<p>              const_iterator __first, const_iterator __last);</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  void insert (iterator __pos, size_type __n, const _Tp& __x)</p>
+<p>    { _M_fill_insert(__pos, __n, __x); }</p>
+<p>  void _M_fill_insert (iterator __pos, size_type __n, const _Tp& __x);</p>
+<p>  void pop_back() {  // 将尾端元素取出，并缩小_M_finish</p>
+<p>    --_M_finish;</p>
+<p>    destroy(_M_finish);  // 由于尾部是最后一个元素的下一个，因此此处实际上就是析构弹出的元素的地址</p>
+<p>  }</p>
+<p>  iterator erase(iterator __position) {   </p>
+<p>    if (__position + 1 != end())  // 如果擦除的不是最后一个元素，那么需要将后面的元素拷贝到当前迭代器的位置</p>
+<p>      copy(__position + 1, _M_finish, __position);</p>
+<p>    --_M_finish; // 这里的操作对于擦除最后一个以及不是最后一个都是一样的处理</p>
+<p>    destroy(_M_finish); // 把原来的最后一个元素析构</p>
+<p>    return __position;  // 从内存的角度上来看，还是原来的地址，但是改地址存储的元素已经变成下一个了</p>
+<p>  }</p>
+<p>  iterator erase(iterator __first, iterator __last) {  // 擦除一块</p>
+<p>    iterator __i = copy(__last, _M_finish, __first); // 直接把last以及以后的都往前copy</p>
+<p>    destroy(__i, _M_finish); // 然后再把已经失效的内存析构掉</p>
+<p>    _M_finish = _M_finish - (__last - __first); // 更新大小</p>
+<p>    return __first; // 地址没变，但是指向的元素变了</p>
+<p>  }</p>
+<p>  void resize(size_type __new_size, const _Tp& __x) {  // 带值的resize</p>
+<p>    if (__new_size < size()) </p>
+<p>      erase(begin() + __new_size, end());  // 如果要求的空间小于当前的空间大小，直接将尾部到新空间尾部的空间擦除备用</p>
+<p>    else</p>
+<p>      insert(end(), __new_size - size(), __x);  // 新空间比目前的空间大，由insert流程进行扩容</p>
+<p>  }</p>
+<p>  void resize(size_type __new_size) { resize(__new_size, _Tp()); }  // 不带值的resize会调用默认构造函数，因此如果某个类型不支持默认构造函数，那应该无法调用这个</p>
+<p>  void clear() { erase(begin(), end()); }  // clear会析构所有元素，并将start和finish重新设置为0</p>
+<p>protected:</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _ForwardIterator></p>
+<p>  iterator _M_allocate_and_copy(size_type __n, _ForwardIterator __first, </p>
+<p>                                               _ForwardIterator __last)</p>
+<p>{</p>
+<p>    iterator __result = _M_allocate(__n);</p>
+<p>    __STL_TRY {</p>
+<p>      uninitialized_copy(__first, __last, __result);</p>
+<p>      return __result;</p>
+<p>    }</p>
+<p>    __STL_UNWIND(_M_deallocate(__result, __n));</p>
+<p>  }</p>
+<p>#else /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>  iterator _M_allocate_and_copy(size_type __n, const_iterator __first, </p>
+<p>                                               const_iterator __last)</p>
+<p>  {</p>
+<p>    iterator __result = _M_allocate(__n);</p>
+<p>    __STL_TRY {</p>
+<p>      uninitialized_copy(__first, __last, __result);</p>
+<p>      return __result;</p>
+<p>    }</p>
+<p>    __STL_UNWIND(_M_deallocate(__result, __n));</p>
+<p>  }</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>#ifdef __STL_MEMBER_TEMPLATES</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_range_initialize(_InputIterator __first,  </p>
+<p>                           _InputIterator __last, input_iterator_tag)</p>
+<p>  {</p>
+<p>    for ( ; __first != __last; ++__first)</p>
+<p>      push_back(*__first);</p>
+<p>  }</p>
+<p>  // This function is only called by the constructor. </p>
+<p>  template <class _ForwardIterator></p>
+<p>  void _M_range_initialize(_ForwardIterator __first,</p>
+<p>                           _ForwardIterator __last, forward_iterator_tag)</p>
+<p>  {</p>
+<p>    size_type __n = 0;</p>
+<p>    distance(__first, __last, __n);</p>
+<p>    _M_start = _M_allocate(__n);</p>
+<p>    _M_end_of_storage = _M_start + __n;</p>
+<p>    _M_finish = uninitialized_copy(__first, __last, _M_start);</p>
+<p>  }</p>
+<p>  template <class _InputIterator></p>
+<p>  void _M_range_insert(iterator __pos,</p>
+<p>                       _InputIterator __first, _InputIterator __last,</p>
+<p>                       input_iterator_tag);</p>
+<p>  template <class _ForwardIterator></p>
+<p>  void _M_range_insert(iterator __pos,</p>
+<p>                       _ForwardIterator __first, _ForwardIterator __last,</p>
+<p>                       forward_iterator_tag);</p>
+<p>#endif /<em> __STL_MEMBER_TEMPLATES </em>/</p>
+<p>};</p>
+</code>`<code>
+<p>首先看内存分配器：</code>class _Alloc = __STL_DEFAULT_ALLOCATOR(_Tp)<code>，SGI的STL代码中，没有使用STL默认的内存分配器，因此，这里定义选用的是alloc，也就是前面介绍的<a href="https://github.com/quinnwencn/blog/issues/87">SGI自定义的分级内存分配</a>:</p>
+</code>`<code>Cpp
+<h1>ifndef __STL_DEFAULT_ALLOCATOR</h1>
+<h1>  ifdef __STL_USE_STD_ALLOCATORS</h1>
+<h1>    define __STL_DEFAULT_ALLOCATOR(T) allocator< T ></h1>
+<h1>  else</h1>
+<h1>    define __STL_DEFAULT_ALLOCATOR(T) alloc</h1>
+<h1>  endif</h1>
+<h1>endif</h1>
+</code>`<code>
+</code>vector<code> protected继承自 </code>_Vector_base<code>, </code>_Vector_base<code>的功能简单，只是做了内存申请和释放，以及获取内存分配器的工作而已：
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc> </p>
+<p>class _Vector_base {</p>
+<p>public:</p>
+<p>  typedef _Alloc allocator_type;  // vector使用的是alloc，因此_Alloc也是alloc</p>
+<p>  allocator_type get_allocator() const { return allocator_type(); }</p>
+<p>  _Vector_base(const _Alloc&)</p>
+<p>    : _M_start(0), _M_finish(0), _M_end_of_storage(0) {}</p>
+<p>  _Vector_base(size_t __n, const _Alloc&)</p>
+<p>    : _M_start(0), _M_finish(0), _M_end_of_storage(0) </p>
+<p>  {</p>
+<p>    _M_start = _M_allocate(__n);</p>
+<p>    _M_finish = _M_start;</p>
+<p>    _M_end_of_storage = _M_start + __n;</p>
+<p>  }</p>
+<p>  ~_Vector_base() { _M_deallocate(_M_start, _M_end_of_storage - _M_start); }</p>
+<p>protected:</p>
+<p>  _Tp* _M_start;  // 申请内存你的起始地址</p>
+<p>  _Tp* _M_finish;  // 使用了的内存的结束地址，初始化时，和_M_start一致，因为没有使用</p>
+<p>  _Tp* _M_end_of_storage;  // 申请的内存的末尾地址，相当于capacity</p>
+<p>  typedef simple_alloc<_Tp, _Alloc> _M_data_allocator;   // 为了方便以元素的size为大小申请内存</p>
+<p>  _Tp* _M_allocate(size_t __n)</p>
+<p>    { return _M_data_allocator::allocate(__n); }</p>
+<p>  void _M_deallocate(_Tp* __p, size_t __n) </p>
+<p>    { _M_data_allocator::deallocate(__p, __n); }</p>
+<p>};</p>
+</code>`<code>
+<p>其中，</code>_M_start<code>，</code>_M_finish<code>和</code>_M_end_of_storage<code>分别是申请的内存的起始地址、使用了的内存的末地址，以及内存大小尾地址。由于</code>vector<code>是通过protected集成，因此这些成员</code>vector<code>也可以访问到。</p>
+</code>vector<code>的操作对内部内存你的影响可以参考这个图：
+<img src="https://github.com/user-attachments/assets/fc595d70-7f3c-4557-8bdf-be7c6b389c07" alt="image" style="max-width:100%;">
+<h2>constructor</h2>
+</code>vector<code>的构造函数分为几个：
+<p>* 是默认构造函数：</code>explicit vector(const allocator_type& __a = allocator_type())<code>，默认指定alloc作为内存分配器，由于没有指定分配的大小，因此该构造函数实际上没有分配内存</p>
+<p>* 指定分配大小：</code>explicit vector(size_type __n)<code>，改构造函数使用默认的内存分配器分配n个大小的内存，并调用元素类型的默认构造函数对内存进行构造</p>
+<p>* 指定大小和初始值：</code>vector(size_type __n, const _Tp& __value, const allocator_type& __a = allocator_type()) <code>, 使用默认的alloc作为内存分配器，并构造n个类型大小的内存，拷贝构造该区域</p>
+<p>* 拷贝构造函数：</code>vector(const vector<_Tp, _Alloc>& __x) <code>，内部调用</code>uninitialized_copy<code>进行拷贝构造吗，内部会对是不是trivial区别对待。</p>
+<p>展开来看：</p>
+</code>`<code>Cpp
+<p>  vector(size_type __n, const _Tp& __value,</p>
+<p>         const allocator_type& __a = allocator_type()) </p>
+<p>    : _Base(__n, __a)</p>
+<p>    { _M_finish = uninitialized_fill_n(_M_start, __n, __value); }</p>
+</code>`<code>
+<p>vector如果指定元素个数，都是调用了</code>uninitialized_fill_n<code>对内存进行构造，然后该函数内部调用的是：</p>
+</code>`<code>Cpp
+<p>// Valid if copy construction is equivalent to assignment, and if the</p>
+<p>//  destructor is trivial.</p>
+<p>template <class _ForwardIter, class _Size, class _Tp></p>
+<p>inline _ForwardIter</p>
+<p>__uninitialized_fill_n_aux(_ForwardIter __first, _Size __n,</p>
+<p>                           const _Tp& __x, __true_type)</p>
+<p>{</p>
+<p>  return fill_n(__first, __n, __x);</p>
+<p>}</p>
+<p>template <class _ForwardIter, class _Size, class _Tp></p>
+<p>_ForwardIter</p>
+<p>__uninitialized_fill_n_aux(_ForwardIter __first, _Size __n,</p>
+<p>                           const _Tp& __x, __false_type)</p>
+<p>{</p>
+<p>  _ForwardIter __cur = __first;</p>
+<p>  __STL_TRY {</p>
+<p>    for ( ; __n > 0; --__n, ++__cur)</p>
+<p>      _Construct(&*__cur, __x);</p>
+<p>    return __cur;</p>
+<p>  }</p>
+<p>  __STL_UNWIND(_Destroy(__first, __cur));</p>
+<p>}</p>
+<p>template <class _ForwardIter, class _Size, class _Tp, class _Tp1></p>
+<p>inline _ForwardIter </p>
+<p>__uninitialized_fill_n(_ForwardIter __first, _Size __n, const _Tp& __x, _Tp1*)</p>
+<p>{</p>
+<p>  typedef typename __type_traits<_Tp1>::is_POD_type _Is_POD;</p>
+<p>  return __uninitialized_fill_n_aux(__first, __n, __x, _Is_POD());</p>
+<p>}</p>
+<p>template <class _ForwardIter, class _Size, class _Tp></p>
+<p>inline _ForwardIter </p>
+<p>uninitialized_fill_n(_ForwardIter __first, _Size __n, const _Tp& __x)</p>
+<p>{</p>
+<p>  return __uninitialized_fill_n(__first, __n, __x, __VALUE_TYPE(__first));</p>
+<p>}</p>
+</code>`<code>
+<p>从上述的代码可以看出，</code>uninitialized_fill_n<code>内部调用了</code>__uninitialized_fill_n<code>，</code>__uninitialized_fill_n<code>内部会根据Tp1的类型，推断POD数据类型，POD类型的构造会更简单，直接赋值(</code>fill_n<code>)；否则就需要调用placement new构造。</p>
+<h2>尾部插入数据 </code>push_back<code></h2>
+</code>`<code>Cpp
+<p>void push_back(const _Tp& __x) {</p>
+<p>    if (_M_finish != _M_end_of_storage) {</p>
+<p>      construct(_M_finish, __x);</p>
+<p>      ++_M_finish;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_insert_aux(end(), __x);</p>
+<p>  }</p>
+</code>`<code>
+<p>尾部插入数据时，根据当前容器的大小，有不同的操作：</p>
+<p>* 当前的大小小于容器的容量： 直接在尾部构造一个对象，并扩大大小</p>
+<p>* 当前的大小已经是容器的容器：没有空间容纳新增的对象了，需要重新申请内存（2倍大小），并将原有数据拷贝到新内存，然后在尾部构造插入的元素，这一部分的实现是</code>_M_insert_aux(end(), __x)``<code></p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>void </p>
+<p>vector<_Tp, _Alloc>::_M_insert_aux(iterator __position, const _Tp& __x)</p>
+<p>{</p>
+<p>  if (_M_finish != _M_end_of_storage) {</p>
+<p>    construct(_M_finish, *(_M_finish - 1));</p>
+<p>    ++_M_finish;</p>
+<p>    _Tp __x_copy = __x;</p>
+<p>    copy_backward(__position, _M_finish - 2, _M_finish - 1);</p>
+<p>    *__position = __x_copy;</p>
+<p>  }</p>
+<p>  else {</p>
+<p>    const size_type __old_size = size();</p>
+<p>    const size_type __len = __old_size != 0 ? 2 * __old_size : 1;  // 计算新空间</p>
+<p>    iterator __new_start = _M_allocate(__len);</p>
+<p>    iterator __new_finish = __new_start;</p>
+<p>    __STL_TRY {</p>
+<p>      __new_finish = uninitialized_copy(_M_start, __position, __new_start);</p>
+<p>      construct(__new_finish, __x);</p>
+<p>      ++__new_finish;</p>
+<p>      __new_finish = uninitialized_copy(__position, _M_finish, __new_finish);</p>
+<p>    }</p>
+<p>    __STL_UNWIND((destroy(__new_start,__new_finish), </p>
+<p>                  _M_deallocate(__new_start,__len)));</p>
+<p>    destroy(begin(), end());</p>
+<p>    _M_deallocate(_M_start, _M_end_of_storage - _M_start);</p>
+<p>    _M_start = __new_start;</p>
+<p>    _M_finish = __new_finish;</p>
+<p>    _M_end_of_storage = __new_start + __len;</p>
+<p>  }</p>
+<p>}</p>
+</code>`<code>
+<p>在插入尾部时，走的是else分支。可以看到，有以下步骤：</p>
+<li>此时会先获取新的容器大小，如果原来的容器是空的，就是1，否则就是原有空间的两倍</li>
+<li>申请新内存，新内存位于</code>__new_start<code>和</code>_new_finish</li>
+<li>通过<code>uninitialized_copy</code>将原容器的数据，拷贝到新申请的内存中，然后在新的尾部构造插入的元素(<code>construct(__new_finish, __x);</code>)，更新<code>__new_finish</code>.</li>
+<li>析构原容器的内存</li>
+<li>返回原有的容器的内存到STL的内存分配器中（根据大小插入链表）</li>
+<li>更新容器的<code>_M_start</code>， <code>_M_finish</code>和<code>_M_end_of_storage</code>。</li>
+<h2>随机插入 <code>insert</code></h2>
+<p>插入有多个版本，插入一个和插入一片：</p>
+<h3>插入一个值</h3>
+<p>``<code>Cpp</p>
+<p>iterator insert(iterator __position, const _Tp& __x) {</p>
+<p>    size_type __n = __position - begin();</p>
+<p>    if (_M_finish != _M_end_of_storage && __position == end()) {</p>
+<p>      construct(_M_finish, __x);</p>
+<p>      ++_M_finish;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_insert_aux(__position, __x);</p>
+<p>    return begin() + __n;</p>
+<p>  }</p>
+</code>`<code>
+<p>插入时，有两种可能：</p>
+<p>* 插入尾部：容器没满并且插入的位置是容器尾部，此时在尾部直接构造，并递增尾部</code>_M_finish<code>；</p>
+<p>* 同样是调用</code>_M_insert_aux<code>，和push_back一样。如果插入的位置是尾部，那么做法和push_back扩容一样；如果不是尾部，那么走的就是if分支</p>
+</code>`<code>Cpp
+<p>  if (_M_finish != _M_end_of_storage) {</p>
+<p>    construct(_M_finish, *(_M_finish - 1));</p>
+<p>    ++_M_finish;</p>
+<p>    _Tp __x_copy = __x;</p>
+<p>    copy_backward(__position, _M_finish - 2, _M_finish - 1);</p>
+<p>    *__position = __x_copy;</p>
+<p>  }</p>
+</code>`<code>
+<p>if分支里，容器的大小小于容器的容量，因此在容器尾部构造一个元素，构造的值是尾部原来的元素，然后搬运插入位置之后的值，再在插入的位置构造插入的元素。</p>
+<h3>插入一片区域</h3>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>void </p>
+<p>vector<_Tp, _Alloc>::insert(iterator __position, </p>
+<p>                            const_iterator __first, </p>
+<p>                            const_iterator __last)</p>
+<p>{</p>
+<p>  if (__first != __last) {</p>
+<p>    size_type __n = 0;</p>
+<p>    distance(__first, __last, __n);  // 计算插入的size</p>
+<p>    if (size_type(_M_end_of_storage - _M_finish) >= __n) {  // 现有容量大于要插入的个数</p>
+<p>      const size_type __elems_after = _M_finish - __position;</p>
+<p>      iterator __old_finish = _M_finish;</p>
+<p>      if (__elems_after > __n) {</p>
+<p>        uninitialized_copy(_M_finish - __n, _M_finish, _M_finish);  // 将尾部n个元素，先都搬到尾部以后的空间</p>
+<p>        _M_finish += __n;</p>
+<p>        copy_backward(__position, __old_finish - __n, __old_finish); // 将 position 开始的n个元素，拷贝到以old_finish结尾的位置， 腾出位置给要插入的元素</p>
+<p>        copy(__first, __last, __position);  // 然后再把要插入的元素拷贝到position开始的位置</p>
+<p>      }</p>
+<p>      else {</p>
+<p>        uninitialized_copy(__first + __elems_after, __last, _M_finish);  // 先将把要插入的元素中的后 elems_after个的元素拷贝到尾部</p>
+<p>        _M_finish += __n - __elems_after; // 更新尾部</p>
+<p>        uninitialized_copy(__position, __old_finish, _M_finish); // 然后将插入位置到初始尾部的元素拷贝到新尾部</p>
+<p>        _M_finish += __elems_after; // 再更新尾部</p>
+<p>        copy(__first, __first + __elems_after, __position);  // 将要插入的元素的前elems_after个元素插入到position的地方</p>
+<p>      }</p>
+<p>    }</p>
+<p>    else {  // 容器的剩余容量小于要插入的数量</p>
+<p>      const size_type __old_size = size();</p>
+<p>      const size_type __len = __old_size + max(__old_size, __n);  // 计算 新的大小，取容器的size加上size与插入元素个数的最大值作为新内存大小</p>
+<p>      iterator __new_start = _M_allocate(__len);  // 重新申请内存</p>
+<p>      iterator __new_finish = __new_start;</p>
+<p>      __STL_TRY {</p>
+<p>        __new_finish = uninitialized_copy(_M_start, __position, __new_start); // 将开始到pisition的元素拷贝过去</p>
+<p>        __new_finish = uninitialized_copy(__first, __last, __new_finish); 再拷贝要插入的元素</p>
+<p>        __new_finish</p>
+<p>          = uninitialized_copy(__position, _M_finish, __new_finish); // 然后再拷贝剩余的元素</p>
+<p>      }</p>
+<p>      __STL_UNWIND((destroy(__new_start,__new_finish),</p>
+<p>                    _M_deallocate(__new_start,__len)));  //  有出错，就将新内存析构并释放，可以看到，原始容器没修改</p>
+<p>      destroy(_M_start, _M_finish);   // 拷贝成功就析构原始容器的内存元素</p>
+<p>      _M_deallocate(_M_start, _M_end_of_storage - _M_start); // 并返回内存到内存池</p>
+<p>      _M_start = __new_start;</p>
+<p>      _M_finish = __new_finish;</p>
+<p>      _M_end_of_storage = __new_start + __len; //  更新容器大小和起始地址</p>
+<p>    }</p>
+<p>  }</p>
+<p>}</p>
+</code>`<code>
+<p>插入一片区域时，默认插入的区域的迭代器不相等，否则就相当于没插入了。插入时，首先计算要插入的元素个数n：</p>
+<p>* 如果容器的还有容量能够容得下插入的元素</p>
+<p>   * 如果插入位置之后的元素个数大于要插入的元素个数：</p>
+<p>       * 那么将尾部n个元素，先都搬到尾部以后的空间，然后将position开始的n个元素，使用</code>copy_backend<code> 拷贝到以__old_finish结尾的内存空间，为插入的元素腾出空间</p>
+<p>       * 拷贝要插入的元素到position开始的内存</p>
+<p>    * 插入位置之后的元素个数小于要插入的元素个数：</p>
+<p>       * 我们假设要插入位置position后还有N个元素，那么我们将要插入的数据N个之后的数据插入到容器尾部， 更新容器尾部</p>
+<p>       * 然后将原始容器position到旧尾部的元素，拷贝到新尾部开始的内存</p>
+<p>       * 最后将要插入元素的前N个拷贝到position开始的位置</p>
+<p>* 如果要插入的元素个数大于容器剩余容量</p>
+<p>    * 计算新空间大小new_size，新空间大小new_size等于原容器的大小old_size，加上 要插入元素空间n的最大值，即 $new_size = old_size + max(old_size, n)$</p>
+<p>    * 重新分配new_size的内存</p>
+<p>    * 将原容器的开始到position的元素拷贝到新内存起始地址_new_start</p>
+<p>    * 将要插入的元素拷贝到新内存的位置，该位置由上一步拷贝返回</p>
+<p>    * 将原容器的剩余元素拷贝到上一步返回的地址</p>
+<p>    * 如果上述三步任何一步出错，就将新申请的内粗析构再插回内存链表</p>
+<p>    * 成功则析构并将原始容器的内存放回链表，更新新容器的start, finish和end_of_storage</p>
+<h2></code>pop_back<code></h2>
+</code>`<code>Cpp
+<p>void pop_back() {</p>
+<p>    --_M_finish;</p>
+<p>    destroy(_M_finish);</p>
+<p>  }</p>
+</code>`<code>
+</code>pop_back<code>的代码相对简单，那就是将</code>_M_finish<code>递减，并析构，但是为什么不判断是否为空呢？可能是为了避免冗余检查，并把调用</code>pop_back<code>时确保容器不为空的责任留给了开发者。
+<h2></code>erase<code></h2>
+<p>  iterator erase(iterator __position) {</p>
+<p>    if (__position + 1 != end())</p>
+<p>      copy(__position + 1, _M_finish, __position);</p>
+<p>    --_M_finish;</p>
+<p>    destroy(_M_finish);</p>
+<p>    return __position;  // 实际上迭代器没有变，只是迭代器指向的数据变了，也可以说是失效了。</p>
+<p>  }</p>
+<p>  iterator erase(iterator __first, iterator __last) {</p>
+<p>    iterator __i = copy(__last, _M_finish, __first);</p>
+<p>    destroy(__i, _M_finish);</p>
+<p>    _M_finish = _M_finish - (__last - __first);</p>
+<p>    return __first;</p>
+<p>  }</p>
+</code>`<code>
+</code>erase<code>有两个版本：
+<p>* erase单一迭代器： 如果删除的位置不是尾部，那么就将后一个元素到尾部的元素向前拷贝一个位置，否则就直接删除尾部</p>
+<p>* erase一片区域：直接将last开始，到尾部的元素，拷贝到first开始的位置，并把返回迭代器到尾部迭代器的内存析构，然后更新尾部迭代器；</p>
+<h2></code>clear<code></h2>
+</code>`<code>Cpp
+<p>void clear() { erase(begin(), end()); }</p>
+</code>``
+<p>调用erase把开始到尾部迭代器的都擦除</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #90</p>
+    </footer>
+</body>
+</html>

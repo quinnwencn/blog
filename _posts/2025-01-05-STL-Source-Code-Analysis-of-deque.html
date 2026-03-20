@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[STL] Source Code Analysis of deque - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[STL] Source Code Analysis of deque</h1>
+    <p class="date">2025-01-05</p>
+    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> <span class="label">SGI</span> </div>
+    <hr>
+    <div class="content">
+<p><code>vector</code>是一个单项开口的连续线性空间，而<code>deque</code>是一个双向开口的连续线性空间：</p>
+<img src="https://github.com/user-attachments/assets/cb062d7b-71c5-482e-b300-936b3e2fe407" alt="image" style="max-width:100%;">
+<p>由于是双向开口，<code>deque</code>在头部的插入操作也是常数时间完成，这比<code>vector</code>头部插入更高效。同时，<code>deque</code>也提供了random access iterator，但是比vector的更复杂。为了实现双向开口，<code>deque</code>使用了一个映射快，将每一片线性空间映射到映射块中，代码里把这个映射快叫做map（不是STL的map）。</p>
+<h1>源码</h1>
+<p>和其他容器一样，<code>deque</code>同样是有一个<code>_Deque_base</code>：</p>
+<p>``<code>Cpp</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>class _Deque_base {</p>
+<p>public:</p>
+<p>  typedef _Deque_iterator<_Tp,_Tp&,_Tp*>             iterator;</p>
+<p>  typedef _Deque_iterator<_Tp,const _Tp&,const _Tp*> const_iterator;</p>
+<p>  typedef _Alloc allocator_type;</p>
+<p>  allocator_type get_allocator() const { return allocator_type(); }</p>
+<p>  _Deque_base(const allocator_type&, size_t __num_elements)</p>
+<p>    : _M_map(0), _M_map_size(0),  _M_start(), _M_finish() {</p>
+<p>    _M_initialize_map(__num_elements);</p>
+<p>  }</p>
+<p>  _Deque_base(const allocator_type&)</p>
+<p>    : _M_map(0), _M_map_size(0),  _M_start(), _M_finish() {}</p>
+<p>  ~_Deque_base();    </p>
+<p>protected:</p>
+<p>  void _M_initialize_map(size_t);</p>
+<p>  void _M_create_nodes(_Tp<strong> __nstart, _Tp</strong> __nfinish);</p>
+<p>  void _M_destroy_nodes(_Tp<strong> __nstart, _Tp</strong> __nfinish);</p>
+<p>  enum { _S_initial_map_size = 8 };</p>
+<p>protected:</p>
+<p>  _Tp** _M_map; // map实际上是一个指向指针的指针</p>
+<p>  size_t _M_map_size;  </p>
+<p>  iterator _M_start;</p>
+<p>  iterator _M_finish;</p>
+<p>  typedef simple_alloc<_Tp, _Alloc>  _Node_alloc_type;</p>
+<p>  typedef simple_alloc<_Tp*, _Alloc> _Map_alloc_type;</p>
+<p>  _Tp* _M_allocate_node()</p>
+<p>    { return _Node_alloc_type::allocate(__deque_buf_size(sizeof(_Tp))); }</p>
+<p>  void _M_deallocate_node(_Tp* __p)</p>
+<p>    { _Node_alloc_type::deallocate(__p, __deque_buf_size(sizeof(_Tp))); }</p>
+<p>  _Tp** _M_allocate_map(size_t __n) </p>
+<p>    { return _Map_alloc_type::allocate(__n); }</p>
+<p>  void _M_deallocate_map(_Tp** __p, size_t __n) </p>
+<p>    { _Map_alloc_type::deallocate(__p, __n); }</p>
+<p>};</p>
+</code>`<code>
+<p>其中的成员：</p>
+<p>* </code>_M_map<code>是一个指向指针的指针，</p>
+<p>* </code>_M_map_size<code>记录着map的大小，也就是指针数组的大小</p>
+<p>* </code>_M_start<code>和</code>_M_finish<code>是迭代器</p>
+<p>我们展开看看</code>deque<code>的迭代器：</p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Ref, class _Ptr></p>
+<p>struct _Deque_iterator {</p>
+<p>  typedef _Deque_iterator<_Tp, _Tp&, _Tp*>             iterator;</p>
+<p>  typedef _Deque_iterator<_Tp, const _Tp&, const _Tp*> const_iterator;</p>
+<p>  static size_t _S_buffer_size() { return __deque_buf_size(sizeof(_Tp)); }</p>
+<p>  typedef random_access_iterator_tag iterator_category;</p>
+<p>// 因为没有继承自std::iterator，以下五个类型别名需要自定义</p>
+<p>  typedef _Tp value_type;</p>
+<p>  typedef _Ptr pointer;</p>
+<p>  typedef _Ref reference;</p>
+<p>  typedef size_t size_type;</p>
+<p>  typedef ptrdiff_t difference_type;</p>
+<p>  typedef _Tp** _Map_pointer;</p>
+<p>  typedef _Deque_iterator _Self;</p>
+<p> // 用于保持与容器的关系</p>
+<p>  _Tp* _M_cur;   // 指向当前内存片的current</p>
+<p>  _Tp* _M_first;  // 指向当前内存片的起始地址</p>
+<p>  _Tp* _M_last;   // 指向当前内存片的末尾地址</p>
+<p>  _Map_pointer _M_node;   // 指向deque的控制中心</p>
+<p> // 。。。</p>
+</code>`<code>
+<p>从迭代器的定义可以看到，</code>deque<code>的迭代器定义为random access iterator，没有继承自</code>std::iterator<code>，因此自定义了迭代器要求的五个类型别名。由于</code>deque<code>是使用map执行一片片内存，因此需要一个迭代器用于维护这篇内存的current位置，起始位置和终止位置，也就是迭代器中的</code>_M_cur<code>, </code>_M_first<code>, 和</code>_M_finish<code>， 最后还有一个</code>_M_node<code>指向map数组，也就是控制中心。</p>
+<p>迭代器中有一个静态方法：</code>static size_t _S_buffer_size() { return __deque_buf_size(sizeof(_Tp)); }<code>，这意味着</code>deque<code>的内存片的大小只与存储的类型有关，计算方法如下：</p>
+</code>`<code>Cpp
+<p>// Note: this function is simply a kludge to work around several compilers'</p>
+<p>//  bugs in handling constant expressions.</p>
+<p>inline size_t __deque_buf_size(size_t __size) {</p>
+<p>  return __size < 512 ? size_t(512 / __size) : size_t(1);</p>
+<p>}</p>
+</code>`<code>
+<p>如果元素的大小大于512字节，</code>deque<code>就退化成链表了。下图可以表示控制数组和内存片的关系：</p>
+<img src="https://github.com/user-attachments/assets/cbeb08ed-cb0c-4e5f-b5a3-51e630a891e5" alt="image" style="max-width:100%;">
+<h2>迭代器的几个关键操作</h2>
+<p>由于每个内存片的大小有限，常见的递增、递减都可能会跨越内存片，  因此迭代器需要维护在同一片内存片以及跨片的可能性。</p>
+<h3></code>_M_set_node<code></h3>
+</code>_M_set_node<code>主要用于在跨片时，更新first、last和node：
+</code>`<code>Cpp
+<p>  void _M_set_node(_Map_pointer __new_node) {</p>
+<p>    _M_node = __new_node;</p>
+<p>    _M_first = *__new_node;</p>
+<p>    _M_last = _M_first + difference_type(_S_buffer_size());</p>
+<p>  }</p>
+</code>`<code>
+<h3>自增</h3>
+</code>`<code>Cpp
+<p>  _Self& operator++() { // ++it</p>
+<p>    ++_M_cur;</p>
+<p>    if (_M_cur == _M_last) {</p>
+<p>      _M_set_node(_M_node + 1);</p>
+<p>      _M_cur = _M_first;</p>
+<p>    }</p>
+<p>    return *this; </p>
+<p>  }</p>
+<p>  _Self operator++(int)  {  // it++</p>
+<p>    _Self __tmp = *this;</p>
+<p>    ++*this;</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+</code>`<code>
+<p>在（++it)自增时，如果自增后，cur已经到达了内存片的last，那就意味着已经跨越了一篇内存片，此时要调用</code>_M_set_node<code>设置迭代器的first、last和node为新的内存片，并且设置cur为更新后的first。</p>
+<h3>自减</h3>
+</code>`<code>Cpp
+<p>  _Self& operator--() {</p>
+<p>    if (_M_cur == _M_first) {</p>
+<p>      _M_set_node(_M_node - 1);</p>
+<p>      _M_cur = _M_last;</p>
+<p>    }</p>
+<p>    --_M_cur;</p>
+<p>    return *this;</p>
+<p>  }</p>
+<p>  _Self operator--(int) {</p>
+<p>    _Self __tmp = *this;</p>
+<p>    --*this;</p>
+<p>    return __tmp;</p>
+<p>  }</p>
+</code>`<code>
+<p>自减时，如果此时cur处于内存片的起始位置，也就是first，那么也会跨越内存片。</p>
+<h2>加等于</h2>
+</code>`<code>Cpp
+<p>  _Self& operator+=(difference_type __n)</p>
+<p>  {</p>
+<p>    difference_type __offset = __n + (_M_cur - _M_first);</p>
+<p>    if (__offset >= 0 && __offset < difference_type(_S_buffer_size()))  // 仍然处于同一片内存片</p>
+<p>      _M_cur += __n;</p>
+<p>    else {</p>
+<p>     // 此时发生了跨内存片的情况，大于0表示向右胯，小于0表示向左胯，这两种情况都求出跨越的长度，以及方向</p>
+<p>      difference_type __node_offset =</p>
+<p>        __offset > 0 ? __offset / difference_type(_S_buffer_size())</p>
+<p>                   : -difference_type((-__offset - 1) / _S_buffer_size()) - 1;</p>
+<p>      _M_set_node(_M_node + __node_offset);  // 然后根据方向进行跨越</p>
+<p>      _M_cur = _M_first + </p>
+<p>        (__offset - __node_offset * difference_type(_S_buffer_size()));  // 跨越后偏移长度</p>
+<p>    }</p>
+<p>    return *this;</p>
+<p>  }</p>
+</code>`<code>
+<p>加等于是一个特别的函数，因为加法和减法都可以基于这个去实现。由于deque的特殊性，加等于同样会产生跨内存片的可能，要么是向右跨，要么是向左跨，跨越的长度也需要记住，详细解析看上述代码注释。</p>
+<h2>deque构造函数</h2>
+</code>`<code>Cpp
+<p>  explicit deque(const allocator_type& __a = allocator_type()) </p>
+<p>    : _Base(__a, 0) {}</p>
+<p>  deque(const deque& __x) : _Base(__x.get_allocator(), __x.size()) </p>
+<p>    { uninitialized_copy(__x.begin(), __x.end(), _M_start); }</p>
+<p>  deque(size_type __n, const value_type& __value,</p>
+<p>        const allocator_type& __a = allocator_type()) : _Base(__a, __n)</p>
+<p>    { _M_fill_initialize(__value); }</p>
+<p>  explicit deque(size_type __n) : _Base(allocator_type(), __n)</p>
+<p>    { _M_fill_initialize(value_type()); }</p>
+</code>`<code>
+<p>可以看到，deque的构造函数都是委托_Base，也就是_Deque_base进行内存申请，然后再将值进行拷贝或者构造， 可以看出，_Deque_base使用</code>_M_initialize_map<code>来申请内存：</p>
+</code>`<code>Cpp
+<p>  _Deque_base(const allocator_type&, size_t __num_elements)</p>
+<p>    : _M_map(0), _M_map_size(0),  _M_start(), _M_finish() {</p>
+<p>    _M_initialize_map(__num_elements);</p>
+<p>  }</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>void</p>
+<p>_Deque_base<_Tp,_Alloc>::_M_initialize_map(size_t __num_elements)</p>
+<p>{</p>
+<p>  size_t __num_nodes = </p>
+<p>    __num_elements / __deque_buf_size(sizeof(_Tp)) + 1;  // 需要的节点数 = (元素个数 / 每个内存片可以容纳的元素个数) + 1</p>
+<p>  _M_map_size = max((size_t) _S_initial_map_size, __num_nodes + 2); // 一个map要管理的节点数 = max(8, 所需节点数+ 2）；</p>
+<p>  _M_map = _M_allocate_map(_M_map_size); // _M_allocate_map实际上使用的时simple_alloc，分配一个map，也就是指针数组</p>
+<p>  _Tp** __nstart = _M_map + (_M_map_size - __num_nodes) / 2; // 对于刚分配出来的map，start指向中间</p>
+<p>  _Tp** __nfinish = __nstart + __num_nodes;  // finish在申请的节点的末尾，这样使得start和finish指向申请的map的居中位置</p>
+<p>  __STL_TRY {</p>
+<p>    _M_create_nodes(__nstart, __nfinish); // 前面只是分配了map的内存，start到finish的node对应的内存片还没申请呢，这里就是要做申请工作</p>
+<p>  }</p>
+<p>  __STL_UNWIND((_M_deallocate_map(_M_map, _M_map_size), </p>
+<p>                _M_map = 0, _M_map_size = 0));</p>
+<p>  _M_start._M_set_node(__nstart); // 设置deque的start和finish迭代器指向的内存片</p>
+<p>  _M_finish._M_set_node(__nfinish - 1);</p>
+<p>  _M_start._M_cur = _M_start._M_first;  // 设置deque的start迭代器的cur</p>
+<p>  _M_finish._M_cur = _M_finish._M_first +</p>
+<p>               __num_elements % __deque_buf_size(sizeof(_Tp));</p>
+<p>}</p>
+<p>// 为start和finish指向的内存片申请内存</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>void _Deque_base<_Tp,_Alloc>::_M_create_nodes(_Tp<strong> __nstart, _Tp</strong> __nfinish)</p>
+<p>{</p>
+<p>  _Tp** __cur;</p>
+<p>  __STL_TRY {</p>
+<p>    for (__cur = __nstart; __cur < __nfinish; ++__cur)</p>
+<p>      *__cur = _M_allocate_node(); // 实际上就是申请内存片， 每次申请一片内存片</p>
+<p>  }</p>
+<p>  __STL_UNWIND(_M_destroy_nodes(__nstart, __cur));</p>
+<p>}</p>
+</code>`<code>
+<h2>deque尾部插入</h2>
+</code>`<code>Cpp
+<p>  void push_back(const value_type& __t) {</p>
+<p>    if (_M_finish._M_cur != _M_finish._M_last - 1) {</p>
+<p>      construct(_M_finish._M_cur, __t);</p>
+<p>      ++_M_finish._M_cur;</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_push_back_aux(__t);</p>
+<p>  }</p>
+<p>// Called only if _M_finish._M_cur == _M_finish._M_last - 1.</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>void deque<_Tp,_Alloc>::_M_push_back_aux(const value_type& __t)  // 处理特殊情况的push_back</p>
+<p>{</p>
+<p>  value_type __t_copy = __t;</p>
+<p>  _M_reserve_map_at_back(); // 如果当前是map的最后一个node，需要为map扩容</p>
+<p>  *(_M_finish._M_node + 1) = _M_allocate_node(); // 在map的finish后新增一个内存片</p>
+<p>  __STL_TRY {</p>
+<p>    construct(_M_finish._M_cur, __t_copy); // 在当前的内存片的最后一个位置构造插入的元素</p>
+<p>    _M_finish._M_set_node(_M_finish._M_node + 1);  // 跨越内存片，更新finish</p>
+<p>    _M_finish._M_cur = _M_finish._M_first; // 此时最新的cur位于新内存片的开始</p>
+<p>  }</p>
+<p>  __STL_UNWIND(_M_deallocate_node(*(_M_finish._M_node + 1)));</p>
+<p>}</p>
+</code>`<code>
+<p>尾部插入时，有两种情况：</p>
+<p>* 当前内存片的cur不是最后一个元素：正常在cur构造</p>
+<p>* 当前内存片的cur正好是最后一个元素：根据情况挪一挪map的start和finish，然后再申请一个内存片，用于存放新插入的数据。此时可能触发对map扩容，即申请更多内存，将原有map的数据拷贝过去。</p>
+<p>现在，我们看看这个</code>_M_reserve_map_at_back<code>，这个函数在</code>push_back_aux<code>与</code>push_front_aux<code>都被用到了：</p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>void deque<_Tp,_Alloc>::_M_reallocate_map(size_type __nodes_to_add,</p>
+<p>                                          bool __add_at_front)</p>
+<p>{</p>
+<p>  size_type __old_num_nodes = _M_finish._M_node - _M_start._M_node + 1;</p>
+<p>  size_type __new_num_nodes = __old_num_nodes + __nodes_to_add;  // 计算现有节点加上要插入的节点的总数</p>
+<p>  _Map_pointer __new_nstart;</p>
+<p>  if (_M_map_size > 2 * __new_num_nodes) {  // 如果map的大小，比总数的两倍还要大，那么久不用申请了，挪一挪位置</p>
+<p>    __new_nstart = _M_map + (_M_map_size - __new_num_nodes) / 2 </p>
+<p>                     + (__add_at_front ? __nodes_to_add : 0);  // 新的start的位置的原则仍然是将元素放在居中位置，保证start和finish之后还有空间</p>
+<p>   // 下面根据新的start和原有的start的位置来判断怎么拷贝map的nodes</p>
+<p>    if (__new_nstart < _M_start._M_node) </p>
+<p>      copy(_M_start._M_node, _M_finish._M_node + 1, __new_nstart);</p>
+<p>    else</p>
+<p>      copy_backward(_M_start._M_node, _M_finish._M_node + 1, </p>
+<p>                    __new_nstart + __old_num_nodes);</p>
+<p>  }</p>
+<p>  else { // map的大小比两倍元素总数小了，要对map扩容， 扩容大小最小是原有map的大小的两倍，最大 = 原有map的大小 加上要插入的元素个数，再加上2</p>
+<p>    size_type __new_map_size = </p>
+<p>      _M_map_size + max(_M_map_size, __nodes_to_add) + 2;</p>
+<p>    _Map_pointer __new_map = _M_allocate_map(__new_map_size); // 申请新的map</p>
+<p>    __new_nstart = __new_map + (__new_map_size - __new_num_nodes) / 2</p>
+<p>                         + (__add_at_front ? __nodes_to_add : 0);  // 仍然是将start和finish的区间放到居中位置</p>
+<p>    copy(_M_start._M_node, _M_finish._M_node + 1, __new_nstart); // 拷贝原有的map的节点到新map上</p>
+<p>    _M_deallocate_map(_M_map, _M_map_size); // 将原有map的内存回收</p>
+<p>  // 更新map和大小</p>
+<p>    _M_map = __new_map;</p>
+<p>    _M_map_size = __new_map_size;</p>
+<p>  }</p>
+<p>  // 更新map的start和finish</p>
+<p>  _M_start._M_set_node(__new_nstart);</p>
+<p>  _M_finish._M_set_node(__new_nstart + __old_num_nodes - 1);</p>
+<p>}</p>
+</code>`<code>
+<p>有两种可能：</p>
+<p>* 插入后元素总数小于map的大小的1/2： 此时就将原有的start和finish往中间挪一挪，以便插入时再申请内存片</p>
+<p>* 插入后元素总数大于map的大小的1/2：对map扩容，重新申请map，再拷贝原有map 的数据到新map，详情见上面源码注释</p>
+<h3>弹出尾部 </code>pop_back<code></h3>
+</code>`<code>Cpp
+<p>  void pop_back() {</p>
+<p>    if (_M_finish._M_cur != _M_finish._M_first) {</p>
+<p>      --_M_finish._M_cur;</p>
+<p>      destroy(_M_finish._M_cur);</p>
+<p>    }</p>
+<p>    else</p>
+<p>      _M_pop_back_aux();</p>
+<p>  }</p>
+<p>// Called only if _M_finish._M_cur == _M_finish._M_first.</p>
+<p>template <class _Tp, class _Alloc></p>
+<p>void deque<_Tp,_Alloc>::_M_pop_back_aux()</p>
+<p>{</p>
+<p>  _M_deallocate_node(_M_finish._M_first);</p>
+<p>  _M_finish._M_set_node(_M_finish._M_node - 1);</p>
+<p>  _M_finish._M_cur = _M_finish._M_last - 1;</p>
+<p>  destroy(_M_finish._M_cur);</p>
+<p>}</p>
+</code>`<code>
+<p>其实pop_back和pop_front一样，都可能出现一个情况，即弹出后，当前的内存片没有元素了，此时，就需要将没有元素的内存片释放，</code>_M_pop_back_aux<code>就是释放没有元素的内存片的。</p>
+<p> ## 插入元素</p>
+</code>`<code>Cpp
+<p>template <class _Tp, class _Alloc></p>
+<p>typename deque<_Tp, _Alloc>::iterator</p>
+<p>deque<_Tp,_Alloc>::_M_insert_aux(iterator __pos, const value_type& __x)</p>
+<p>{</p>
+<p>  difference_type __index = __pos - _M_start;</p>
+<p>  value_type __x_copy = __x;</p>
+<p>  if (size_type(__index) < this->size() / 2) {</p>
+<p>    push_front(front());  // 插入一个元素，用于申请内存和占位</p>
+<p>    iterator __front1 = _M_start;</p>
+<p>    ++__front1;</p>
+<p>    iterator __front2 = __front1;</p>
+<p>    ++__front2;</p>
+<p>    __pos = _M_start + __index;</p>
+<p>    iterator __pos1 = __pos;</p>
+<p>    ++__pos1;</p>
+<p>    copy(__front2, __pos1, __front1);  // 元素拷贝</p>
+<p>  }</p>
+<p>  else {</p>
+<p>    push_back(back());  // 插入一个元素，用于申请内存和占位</p>
+<p>    iterator __back1 = _M_finish;</p>
+<p>    --__back1;</p>
+<p>    iterator __back2 = __back1;</p>
+<p>    --__back2;</p>
+<p>    __pos = _M_start + __index;</p>
+<p>    copy_backward(__pos, __back2, __back1); 拷贝</p>
+<p>  }</p>
+<p>  *__pos = __x_copy; // 要插入的元素</p>
+<p>  return __pos;</p>
+<p>}</p>
+<p>  iterator insert(iterator position, const value_type& __x) {</p>
+<p>    if (position._M_cur == _M_start._M_cur) { // 刚好是再前面插入，push_front完成</p>
+<p>      push_front(__x); </p>
+<p>      return _M_start;</p>
+<p>    }</p>
+<p>    else if (position._M_cur == _M_finish._M_cur) {  // 刚好是在后面插入，push_back完成</p>
+<p>      push_back(__x);</p>
+<p>      iterator __tmp = _M_finish;</p>
+<p>      --__tmp;</p>
+<p>      return __tmp;</p>
+<p>    }</p>
+<p>    else {</p>
+<p>      return _M_insert_aux(position, __x);  // 其他位置，要拷贝元素了</p>
+<p>    }</p>
+<p>  }</p>
+</code>``
+<p>插入元素时，除了插在前端和尾端比较特殊外，其他情况都涉及到元素拷贝，因为deque是双向开口，因此拷贝时可以根据插入位置里start近还是离finish近，选择拷贝元素少的方向进行拷贝。</p>
+<p>如果pos到start的距离比map的一半大小要小，就将start到pos的元素左移一个位置，具体做法是i先在front插入一个值，目的是申请空间，然后将start到pos的元素拷贝到以front的前一个位置；</p>
+<p>否则就在后插入一个元素，将finish到pos的严肃用copy_backward的方式拷贝到fnishi后一个元素</p>
+<p>最后再插入到pos。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #92</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[tips] CMake查找依赖包 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[tips] CMake查找依赖包</h1>
+    <p class="date">2024-05-08</p>
+    <div class="labels"><span class="label">CMake</span> </div>
+    <hr>
+    <div class="content">
+<h1>1. 背景</h1>
+<p>在软件开发时，我们不可避免会用到开源组件或者是其他人提供的库文件。如果开源软件或者是库文件严格按照CMake编译系统开发，并提供FindXXX.cmake或者是XXXConfig.cmake、xxx-config.cmake文件，用于辅助查找头文件和so库文件，那么软件的集成过程一般来说不会遇到编译问题。然而，如果开源软件使用的编译系统并非CMake，而是Makefile或者是meson等其他编译系统，亦或者库文件提供方并未提供足够的文件用于辅助编译，那么我们在CMake脚本中使用<code>find_package</code>将会遇到问题：</p>
+<p>``<code></p>
+<p>CMake Error at CMakeLists.txt:9 (find_package):</p>
+<p>  By not providing "FindOSTree.cmake" in CMAKE_MODULE_PATH this project has</p>
+<p>  asked CMake to find a package configuration file provided by "OSTree", but</p>
+<p>  CMake did not find one.</p>
+<p>  Could not find a package configuration file provided by "OSTree" with any</p>
+<p>  of the following names:</p>
+<p>    OSTreeConfig.cmake</p>
+<p>    ostree-config.cmake</p>
+<p>  Add the installation prefix of "OSTree" to CMAKE_PREFIX_PATH or set</p>
+<p>  "OSTree_DIR" to a directory containing one of the above files.  If "OSTree"</p>
+<p>  provides a separate development package or SDK, be sure it has been</p>
+<p>  installed.</p>
+</code>`<code>
+<h1>2. 问题分析</h1>
+<p>上面的报错我们以OSTree开源仓库为例，改仓库使用的是automake编译系统，因此没有提供FindOSTree.cmake，我们直接在CMake中通过</code>find_package<code>查找OSTree，自然会遇到问题。</p>
+<h2>2.1 </code>find_package<code>到底做了什么</h2>
+<p>在查找依赖包时，实际上是为了为代码编译时提供头文件搜素路径，以及链接时提供库文件的链接路径，</code>find_package<code>也就是完成这个功能的，因此它就负责查找</code>XXX_INCLUDE_DIRS<code>和</code>XXX_LIBRARIES<code>。其中XXX就是要查找的包。</p>
+<h2>2.2 </code>find_package<code>如何查找</h2>
+<p>查找时首先是判断用户是否提供了</code>CMAKE_MODULE_PATH<code>，这个我们根据报错也能看出来。如果用户提供了，那么CMake会在这个路径下查找</code>FindXXX.cmake<code>文件，并根据这个文件去查找依赖。如果</code>CMAKE_MODULE_PATH<code>没有提供，那么CMake就会去系统的Modules路径去查找包的配置文件，也就是上文报错信息提到的</code>XXXConfig.cmake<code>或者</code></p>
+<p>XXX-config.cmake<code>文件。系统的Modules目录一般是：</code>/usr/share/cmake-3.22/Modules<code>，在这里吗我们也能看到里面 有一些FindYYY.cmake的文件了。</p>
+<h1>自定义</code>FindXXX.cmake<code></h1>
+<p>根据提示，我们可以在CMake中指定</code>CMAKE_MODULE_PATH<code>，并在这个路径下制作我们自己的FindXXX.cmake文件，以此来解决编译报错的问题，我们这里仍然以OSTree为例：</p>
+</code>`<code>
+<h1>FindOSTree.cmake</h1>
+<p>set(OSTREE_FOUND TRUE)</p>
+<p>set(OSTREE_ROOT_DIR "/usr")</p>
+<p>find_path(OSTREE_INCLUDE_DIR</p>
+<p>    NAMES ostree.h</p>
+<p>    HINTS ${OSTREE_ROOT_DIR}/include</p>
+<p>    PATH_SUFFIXES ostree-1 src/libostree)</p>
+<p>mark_as_advanced(OSTREE_INCLUDE_DIR)</p>
+<p>find_library(OSTREE_LIBRARY</p>
+<p>    NAMES libostree-1.so</p>
+<p>    HINTS ${OSTREE_ROOT_DIR}/lib</p>
+<p>    PATH_SUFFIXES /.libs)</p>
+<p>mark_as_advanced(OSTREE_LIBRARY)</p>
+<p>find_package(PkgConfig)</p>
+<p>pkg_check_modules(OSTREE_GLIB REQUIRED gio-2.0 glib-2.0)</p>
+<p>include(FindPackageHandleStandardArgs)</p>
+<p>find_package_handle_standard_args(OSTree DEFAULT_MSG OSTREE_LIBRARY OSTREE_INCLUDE_DIR OSTREE_GLIB_FOUND)</p>
+<p>set(OSTREE_INCLUDE_DIRS ${OSTREE_INCLUDE_DIR} ${OSTREE_GLIB_INCLUDE_DIRS})</p>
+<p>set(OSTREE_LIBRARIES ${OSTREE_LIBRARY} ${OSTREE_GLIB_LIBRARIES})</p>
+</code>`<code>
+<p>代码中，我们使用find_path找到ostree头文件和库文件所在的目录，并赋值给</code>OSTREE_INCLUDE_DIR<code>和</code>OSTREE_LIBRARY<code>，同时更新</code>OSTREE_FOUND<code>为TRUE，将</code>OSTREE_INCLUDE_DIR<code>和</code>OSTREE_LIBRARY<code>这两个值分别设置给</code>OSTREE_INCLUDE_DIRS<code>和</code>OSTREE_LIBRARIES<code>，CMake实际是使用这两个变量的。到这里，FindOSTree.cmake就可以工作了，但是，由于OSTree实际上依赖于gio和glib这两个库，所以我们使用pkg_check_modules显示告诉OSTREE需要这两个库，否则编译仍然会报错找不到glib和gio。</p>
+<p>gio和glib的FindGlib.cmake的文件内容如下：</p>
+</code>`<code>
+<p>if (GLIB2_LIBRARIES AND GLIB2_INCLUDE_DIRS)</p>
+<p>    set(GLIB2_FOUND TRUE)</p>
+<p>else (GLIB2_LIBRARIES AND GLIB2_INCLUDE_DIRS)</p>
+<p>    include(FindPkgConfig)</p>
+<p>	if (GLIB2_FIND_REQUIRED)</p>
+<p>		set(_pkgconfig_REQURIED "REQUIRED")</p>
+<p>	else (GLIB2_FIND_REQUIRED)</p>
+<p>		set(_pkgconfig_REQURIED "")</p>
+<p>	endif (GLIB2_FIND_REQUIRED)</p>
+<p>	if (GLIB2_MIN_VERSION)</p>
+<p>		pkg_search_module(GLIB2 ${_pkgconfig_REQUIRED} glib-2.0>=${GLIB2_MIN_VERSION})</p>
+<p>	else (GLIB2_MIN_VERSION)</p>
+<p>		pkg_search_module(GLIB2 ${_pkgconfig_REQUIRED} glib-2.0)</p>
+<p>	endif (GLIB2_MIN_VERSION)</p>
+<p>	if (PKG_CONFIG_FOUND)</p>
+<p>		if (GLIB2_FOUND)</p>
+<p>			set(GLIB2_CORE_FOUND TRUE)</p>
+<p>		else (GLIB2_FOUND)</p>
+<p>			set(GLIB2_CORE_FOUND FALSE)</p>
+<p>		endif (GLIB2_FOUND)</p>
+<p>	endif (PKG_CONFIG_FOUND)</p>
+<p>	if (NOT GLIB2_FOUND AND NOT PKG_CONFIG_FOUND)</p>
+<p>		find_path(_glibconfig_include_DIR</p>
+<p>			NAMES glibconfig.h</p>
+<p>			PATHS /usr/include</p>
+<p>				/usr/lib</p>
+<p>				/usr/lib64</p>
+<p>				/usr/local/include</p>
+<p>				${CMAKE_LIBRARY_PATH}</p>
+<p>			PATH_SUFFIXES glib-2.0/include)</p>
+<p>		find_path(_glib2_include_DIR</p>
+<p>			NAMES glib.h gio.h</p>
+<p>			PATHS</p>
+<p>				/usr/include</p>
+<p>				/usr/local/include</p>
+<p>			PATH_SUFFIXES glib-2.0)</p>
+<p>		find_library(_glib2_link_DIR</p>
+<p>			NAMES</p>
+<p>				glib-2.0</p>
+<p>				glib</p>
+<p>			PATHS</p>
+<p>				/usr/lib</p>
+<p>				/usr/local/lib</p>
+<p>				/usr/lib64)</p>
+<p>		if (_glib2_include_DIR AND _glib2_link_DIR)</p>
+<p>			set(_glib2_FOUND TRUE)</p>
+<p>		endif (_glib2_include_DIR AND _glib2_link_DIR)</p>
+<p>		if (_glib2_FOUND)</p>
+<p>			set(GLIB2_INCLUDE_DIRS ${_glib2_include_DIR} ${_glib2config_include_DIR})</p>
+<p>			set(GLIB2_LIBRARIES ${_glib_link_DIR})</p>
+<p>			set(GLIB2_CORE_FOUND TRUE)</p>
+<p>		else (_glib2_FOUND)</p>
+<p>			set(GLIB2_CORE_FOUND FALSE)</p>
+<p>		endif (_glib2_FOUND)</p>
+<p>		if (NOT LIBINTL_FOUND)</p>
+<p>			find_path(LIBINTL_INCLUDE_DIR</p>
+<p>				NAMES libintl.h</p>
+<p>				PATHS</p>
+<p>					/usr/include</p>
+<p>					/usr/local/include)</p>
+<p>			find_library(LIBINTL_LIBRARY</p>
+<p>				NAMES intl</p>
+<p>				PATHS</p>
+<p>					/usr/lib</p>
+<p>					/usr/local/lib)</p>
+<p>			if (LIBINTL_LIBRARY AND LIBINTL_INCLUDE_DIR)</p>
+<p>				set(LIBINTL_FOUND TRUE)</p>
+<p>			endif (LIBINTL_LIBRARY AND LIBINTL_INCLUDE_DIR)</p>
+<p>		endif (NOT LIBINTL_FOUND)</p>
+<p>		if (NOT LIBICONV_FOUND)</p>
+<p>			find_path(LIBICONV_INCLUDE_DIR</p>
+<p>				NAMES iconv.h</p>
+<p>				PATHS</p>
+<p>					/usr/include</p>
+<p>					/usr/local/include</p>
+<p>				PATH_SUFFIXES glib-2.0)</p>
+<p>			find_library(LIBICONV_LIBRARY</p>
+<p>				NAMES iconv</p>
+<p>				PATHS</p>
+<p>					/usr/lib</p>
+<p>					/usr/local/lib</p>
+<p>					/usr/lib64)</p>
+<p>			if (LIBICONV_INCLUDE_DIR AND LIBICONV_LIBRARY)</p>
+<p>				set(LIBICONV_FOUND TRUE)</p>
+<p>			endif (LIBICONV_INCLUDE_DIR AND LIBICONV_LIBRARY)</p>
+<p>		endif (NOT LIBICONV_FOUND)</p>
+<p>		if (LIBINTL_FOUND)</p>
+<p>			set(GLIB2_LIBRARIES ${GLIB2_LIBRARIES} ${LIBINTL_LIBRARY})</p>
+<p>			set(GLIB2_INCLUDE_DIRS ${GLIB2_INCLUDE_DIRS} ${LIBINTL_INCLUDE_DIR})</p>
+<p>		endif (LIBINTL_FOUND)</p>
+<p>		if (LIBICONV_FOUND)</p>
+<p>			set(GLIB2_LIBRARIES ${GLIB2_LIBRARIES} ${LIBICONV_LIBRARY})</p>
+<p>			set(GLIB2_INCLUDE_DIRS ${GLIB2_INCLUDE_DIRS} ${LIBICONV_INCLUDE_DIR})</p>
+<p>		endif (LIBICONV_FOUND)</p>
+<p>	endif (NOT GLIB2_FOUND AND NOT PKG_CONFIG_FOUND)</p>
+<p>	if (GLIB2_CORE_FOUND AND GLIB2_INCLUDE_DIRS AND GLIB2_LIBRARIES)</p>
+<p>			set(GLIB2_FOUND TRUE)</p>
+<p>	endif (GLIB2_CORE_FOUND AND GLIB2_INCLUDE_DIRS AND GLIB2_LIBRARIES)</p>
+<p>	if (GLIB2_FOUND)</p>
+<p>		if (NOT GLIB2_FIND_QUIETLY)</p>
+<p>			message(STATUS "Found GLib2: ${GLIB2_LIBRARIES} ${GLIB2_INCLUDE_DIRS}")</p>
+<p>		endif (NOT GLIB2_FIND_QUIETLY)</p>
+<p>	else (GLIB2_FOUND)</p>
+<p>		if (NOT GLIB2_FIND_QUIETLY)</p>
+<p>            message(STATUS "GLib2 not found.")</p>
+<p>        endif (NOT GLIB2_FIND_QUIETLY)</p>
+<p>	endif (GLIB2_FOUND)</p>
+<p>	mark_as_advanced(GLIB2_INCLUDE_DIRS GLIB2_LIBRARIES)</p>
+<p>	mark_as_advanced(LIBICONV_INCLUDE_DIR LIBICONV_LIBRARY)</p>
+<p>	mark_as_advanced(LIBINTL_INCLUDE_DIR LIBINTL_LIBRARY)</p>
+<p>endif (GLIB2_LIBRARIES AND GLIB2_INCLUDE_DIRS)</p>
+<p>if (GLIB2_FOUND)</p>
+<p>	include(CheckIncludeFiles)</p>
+<p>	set(CMAKE_REQUIRED_INCLUDES ${GLIB2_INCLUDE_DIRS})</p>
+<p>	check_include_files(glib/gregex.h HAVE_GLIB_GREGEX_H)</p>
+<p>	set(CMAKE_REQUIRED_INCLUDES "")</p>
+<p>endif (GLIB2_FOUND)</p>
+</code>``
+<p>这里，GLIB还依赖于libiconv和libintl，但是我们也可以不编写他们的find文件，直接在glib里查找，</p>
+<p>最后，将这俩个cmake文件放到工程目录下的cmake-modules目录，并在顶层CMake文件中生命CMAKE_MODULE_PATH即可。</p>
+<p>当然，将这两个文件放到系统的Modules目录也是可以的。</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #29</p>
+    </footer>
+</body>
+</html>

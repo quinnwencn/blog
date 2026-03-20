@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>06 编写一个基于TEE的Rust版本加减乘除计算器 - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>06 编写一个基于TEE的Rust版本加减乘除计算器</h1>
+    <p class="date">2025-03-05</p>
+    <div class="labels"><span class="label">TrustZone</span> <span class="label">TEE</span> <span class="label">ARMv8</span> <span class="label">Rust</span> <span class="label">QEMU</span> </div>
+    <hr>
+    <div class="content">
+<h1>为什么要使用Rust编写TA/CA</h1>
+<p>我们通过前面的例子已经看到，OP-TEE使用C语言已经可以无故障开发TA/CA了，并且C语言相比其他语言，效率和性能也更高，那么为什么还要引入Rust到OP-TEE的TA/CA开发呢？我们可以看两个例子：</p>
+<li>Qualcomm's Secure Execution Environment(QSEE) privilege escalation vulnerability and exploit: <a href="http://bits-please.blogspot.com/2016/05/qsee-privilege-escalation-vulnerability.html">CVE-2015-6639</a></li>
+<li>Extracting Qualcomm's KeyMaster Keys - <a href="http://bits-please.blogspot.com/2016/06/extracting-qualcomms-keymaster-keys.html">Braking Android Full Disk Encryption:</a></li>
+<p>以上两个例子，都是利用了C语言的内存安全问题，打破了TrustZone的安全保证，泄漏用户的秘钥或者是敏感数据。为了解决TrustZone的安全机制被内存漏洞打破的问题，Rust从2018年开始，逐步引入到OP-TEE.</p>
+<h1>Rust如何引入到OP-TEE</h1>
+<p>在OP-TEE的架构中，EL1层运行了REE OS的驱动和TEE OS，他们分别运行在Normal World和Secure World。基于REE OS的OP-TEE驱动，OP-TEE开发了TEE Client SDK，这个SDK遵循GlobalPlatform TEE的API，其他自定义的TEE厂商也会遵循这个API规范，开发满足GlobalPlatform TEE规范的SDK。基于Secure World的OP-TEE Trusted OS，OP-TEE开发了TEE TA SDK，然后基于这个SDK，用户可以自行编写自己的TA，TEE TA SDK同样是满足GlobalPlatform OP-TEE Internal Core C API规范的。由于这两个SDK都是使用C语言编写，一旦内存指针管理不善，就可能导致Secure World的敏感信息泄露！</p>
+<img src="https://github.com/user-attachments/assets/6a6d3368-d439-407f-bbd8-5dd96dd94f82" alt="Image" style="max-width:100%;">
+<p>为了在基于TrustZone平台的芯片上支持Rust编写TA和CA，需要使用Rust编写Rust OP-TEE TrustZone SDK，用于替换原始的TEE TA SDK和TEE Client SDK：</p>
+<img src="https://github.com/user-attachments/assets/206c357f-34f0-4941-9b68-de0ee2971497" alt="Image" style="max-width:100%;">
+<p>在Secure World，需要基于Rust编写一些底层的适配库，这些库仍然是基于C语言编写的libutee和libutil实现，然后用Rust调用C，并封装实现，提供一个optee-utee，提供给上层TA调用：</p>
+<img src="https://github.com/user-attachments/assets/95faf595-6b5a-486c-b192-2dd7a1aa1479" alt="Image" style="max-width:100%;">
+<img src="https://github.com/user-attachments/assets/4b24ba53-7d08-4512-bb21-a87e232a5b7e" alt="Image" style="max-width:100%;">
+<p>在Normal World，也是基于libteec进行Rust封装，提供接口生成optee-teec，提供给上层CA调用：</p>
+<img src="https://github.com/user-attachments/assets/ec4f1ab6-159c-4f66-b0a1-1ed17e1a0a4f" alt="Image" style="max-width:100%;">
+<h1>编写一个例子</h1>
+<p>在前面 #113 ，我们使用C语言编写了一个基于TEE的加减乘除计算器，实际上，OP-TEE目前已经支持Rust了，有一个专门的目录<code>optee-rust</code>专门用来存放使用Rust编写的代码和例子。我们现在基于optee-rust的架构，同样编写一个加减乘除计算器！</p>
+<p>首先观察Rust的TA/CA的架构：</p>
+<p>``<code>bash</p>
+<p>.</p>
+<p>├── host  # REE 代码</p>
+<p>│   ├── Cargo.toml  # REE 侧Rust配置</p>
+<p>│   ├── Makefile # 使用Makefile拉起编译</p>
+<p>│   └── src</p>
+<p>│       └── main.rs #  REE 源码</p>
+<p>├── Makefile # 顶层Makefile</p>
+<p>├── proto  # REE和TEE的协议命令字定义</p>
+<p>│   ├── build.rs  # proto的编译前处理脚本</p>
+<p>│   ├── Cargo.toml # Rust配置</p>
+<p>│   └── src</p>
+<p>│       └── lib.rs  # 协议命令字定义源码</p>
+<p>├── ta  # TEE代码</p>
+<p>│   ├── build.rs  # 编译前处理脚本</p>
+<p>│   ├── Cargo.toml #  Rust配置</p>
+<p>│   ├── Makefile # 使用Makefile拉起编译</p>
+<p>│   ├── src </p>
+<p>│   │   └── main.rs  # TEE源码</p>
+<p>│   └── ta_static.rs  # TA的堆配置等信息</p>
+<p>└── uuid.txt   # UUID</p>
+</code>`<code>
+<p>和前面的C语言例子一样，我们基于hello_world-rs拷贝一个roperator：</p>
+</code>`<code>bash
+<p>cd optee/optee_rust/examples</p>
+<p>cp -r hello_world-rs roperate</p>
+</code>`<code>
+<h3>修改UUID</h3>
+<p>Rust的TA/CA的UUID是通过uuid.txt传递的，proto库中通过一个常量将UUID保存下来：</p>
+</code>`<code>Rust
+<p>// proto/src/lib.rs</p>
+<p>pub const UUID: &str = &include_str!(concat!(env!("OUT_DIR"), "/uuid.txt"));</p>
+</code>`<code>
+<p>这样，TA和CA引用proto库就可以获取这个UUID的值</p>
+<h3>修改proto</h3>
+<p>proto里定义了TA和CA会话的Command，我们在这里定义加减乘除：</p>
+</code>`<code>Rust
+<p>pub enum Command {</p>
+<p>    IncValue,</p>
+<p>    DecValue,</p>
+<p>    Multiple,</p>
+<p>    Divide,</p>
+<p>    Unknown,</p>
+<p>}</p>
+<p>impl From<u32> for Command {</p>
+<p>    #[inline]</p>
+<p>    fn from(value: u32) -> Command {</p>
+<p>        match value {</p>
+<p>            0 => Command::IncValue,</p>
+<p>            1 => Command::DecValue,</p>
+<p>            2 => Command::Multiple,</p>
+<p>            3 => Command::Divide,</p>
+<p>            _ => Command::Unknown,</p>
+<p>        }</p>
+<p>    }</p>
+<p>}</p>
+</code>`<code>
+<p>这里只是例子，因此我们只实现了u32类型的数据的加减乘除。</p>
+<h3>修改CA</h3>
+<p>首先需要修改CA编译生成的二进制名：</p>
+</code>`<code>toml
+<p>// host/Cargo.toml</p>
+<p>[package]</p>
+<p>name = "roperate"</p>
+</code>`<code>
+<p>修改业务代码，增加加减乘除：</p>
+</code>`<code>Rust
+<p>// Licensed to the Apache Software Foundation (ASF) under one</p>
+<p>// or more contributor license agreements.  See the NOTICE file</p>
+<p>// distributed with this work for additional information</p>
+<p>// regarding copyright ownership.  The ASF licenses this file</p>
+<p>// to you under the Apache License, Version 2.0 (the</p>
+<p>// "License"); you may not use this file except in compliance</p>
+<p>// with the License.  You may obtain a copy of the License at</p>
+<p>//</p>
+<p>//   http://www.apache.org/licenses/LICENSE-2.0</p>
+<p>//</p>
+<p>// Unless required by applicable law or agreed to in writing,</p>
+<p>// software distributed under the License is distributed on an</p>
+<p>// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</p>
+<p>// KIND, either express or implied.  See the License for the</p>
+<p>// specific language governing permissions and limitations</p>
+<p>// under the License.</p>
+<p>use optee_teec::{Context, Operation, ParamType, Session, Uuid};</p>
+<p>use optee_teec::{ParamNone, ParamValue};</p>
+<p>use proto::{UUID, Command};</p>
+<p>fn operate(session: &mut Session, command: Command, lhs: u32, rhs: u32) -> optee_teec::Result<()> {</p>
+<p>    let p0 = ParamValue::new(lhs, 0, ParamType::ValueInout);</p>
+<p>    let p1 = ParamValue::new(rhs, 0, ParamType::ValueInput);</p>
+<p>    let mut operation = Operation::new(0, p0, p1, ParamNone, ParamNone);</p>
+<p>    println!("Operating {:?} and {:?} ...", operation.parameters().0.a(), operation.parameters().1.a());</p>
+<p>    session.invoke_command(command as u32, &mut operation)?;</p>
+<p>    println!("Result is {:?}", operation.parameters().0.a());</p>
+<p>    Ok(())</p>
+<p>}</p>
+<p>fn main() -> optee_teec::Result<()> {</p>
+<p>    let args: Vec<String> = std::env::args().collect();</p>
+<p>    if args.len() != 4 {</p>
+<p>        eprintln!("Usage: {} <uuid> <command> <value>", args[0]);</p>
+<p>        std::process::exit(1);</p>
+<p>    }</p>
+<p>    let lhs: u32 = args[1].parse().expect("First num is not valid!");</p>
+<p>    let op = &args[2];</p>
+<p>    let rhs: u32 = args[3].parse().expect("Second num is not valid!");</p>
+<p>    let operator = match op.as_str() {</p>
+<p>        "+" => Command::IncValue,</p>
+<p>        "-" => Command::DecValue,</p>
+<p>        "*" => Command::Multiple,</p>
+<p>        "/" => Command::Divide,</p>
+<p>        _ => Command::Unknown,</p>
+<p>    };</p>
+<p>    let mut ctx = Context::new()?;</p>
+<p>    let uuid = Uuid::parse_str(UUID).unwrap();</p>
+<p>    let mut session = ctx.open_session(uuid)?;</p>
+<p>    operate(&mut session, operator, lhs, rhs)?;</p>
+<p>    println!("Success");</p>
+<p>    Ok(())</p>
+<p>}</p>
+</code>`<code>
+<h3>TA代码修改</h3>
+</code>`<code>Rust
+<p>// Licensed to the Apache Software Foundation (ASF) under one</p>
+<p>// or more contributor license agreements.  See the NOTICE file</p>
+<p>// distributed with this work for additional information</p>
+<p>// regarding copyright ownership.  The ASF licenses this file</p>
+<p>// to you under the Apache License, Version 2.0 (the</p>
+<p>// "License"); you may not use this file except in compliance</p>
+<p>// with the License.  You may obtain a copy of the License at</p>
+<p>//</p>
+<p>//   http://www.apache.org/licenses/LICENSE-2.0</p>
+<p>//</p>
+<p>// Unless required by applicable law or agreed to in writing,</p>
+<p>// software distributed under the License is distributed on an</p>
+<p>// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</p>
+<p>// KIND, either express or implied.  See the License for the</p>
+<p>// specific language governing permissions and limitations</p>
+<p>// under the License.</p>
+<p>#![no_std]</p>
+<p>#![no_main]</p>
+<p>#![feature(c_size_t)]</p>
+<p>use optee_utee::{</p>
+<p>    ta_close_session, ta_create, ta_destroy, ta_invoke_command, ta_open_session, trace_println,</p>
+<p>};</p>
+<p>use optee_utee::{Error, ErrorKind, Parameters, Result};</p>
+<p>use proto::Command;</p>
+<p>#[ta_create]</p>
+<p>fn create() -> Result<()> {</p>
+<p>    trace_println!("[+] TA create");</p>
+<p>    Ok(())</p>
+<p>}</p>
+<p>#[ta_open_session]</p>
+<p>fn open_session(_params: &mut Parameters) -> Result<()> {</p>
+<p>    trace_println!("[+] TA open session");</p>
+<p>    Ok(())</p>
+<p>}</p>
+<p>#[ta_close_session]</p>
+<p>fn close_session() {</p>
+<p>    trace_println!("[+] TA close session");</p>
+<p>}</p>
+<p>#[ta_destroy]</p>
+<p>fn destroy() {</p>
+<p>    trace_println!("[+] TA destroy");</p>
+<p>}</p>
+<p>#[ta_invoke_command]</p>
+<p>fn invoke_command(cmd_id: u32, params: &mut Parameters) -> Result<()> {</p>
+<p>    trace_println!("[+] TA invoke command");</p>
+<p>    let mut values = unsafe { params.0.as_value().unwrap() };</p>
+<p>    let rhs = unsafe { params.1.as_value().unwrap() };</p>
+<p>    match Command::from(cmd_id) {</p>
+<p>        Command::IncValue => {</p>
+<p>            values.set_a(values.a() + rhs.a());</p>
+<p>            Ok(())</p>
+<p>        }</p>
+<p>        Command::DecValue => {</p>
+<p>            values.set_a(values.a() - rhs.a());</p>
+<p>            Ok(())</p>
+<p>        }</p>
+<p>        Command::Multiple => {</p>
+<p>            values.set_a(values.a() * rhs.a());</p>
+<p>            Ok(())</p>
+<p>        }</p>
+<p>        Command::Divide => {</p>
+<p>            values.set_a(values.a() / rhs.a());</p>
+<p>            Ok(())</p>
+<p>        }</p>
+<p>        _ => Err(Error::new(ErrorKind::BadParameters)),</p>
+<p>    }</p>
+<p>}</p>
+<p>// TA configurations</p>
+<p>const TA_FLAGS: u32 = 0;</p>
+<p>const TA_DATA_SIZE: u32 = 32 * 1024;</p>
+<p>const TA_STACK_SIZE: u32 = 2 * 1024;</p>
+<p>const TA_VERSION: &[u8] = b"0.1\0";</p>
+<p>const TA_DESCRIPTION: &[u8] = b"This is a hello world example.\0";</p>
+<p>const EXT_PROP_VALUE_1: &[u8] = b"Hello World TA\0";</p>
+<p>const EXT_PROP_VALUE_2: u32 = 0x0010;</p>
+<p>const TRACE_LEVEL: i32 = 4;</p>
+<p>const TRACE_EXT_PREFIX: &[u8] = b"TA\0";</p>
+<p>const TA_FRAMEWORK_STACK_SIZE: u32 = 2048;</p>
+<p>include!(concat!(env!("OUT_DIR"), "/user_ta_header.rs"));</p>
+</code>``
+<h3>验证</h3>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #114</p>
+    </footer>
+</body>
+</html>
