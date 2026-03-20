@@ -5,26 +5,26 @@ on:
     types: [opened, edited, reopened]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  issues: read
+
 jobs:
   convert-issues-to-posts:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Fetch open issues
         run: |
-          # Fetch all open issues (public repo doesn't need auth)
           ISSUES=$(curl -s \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/issues?state=open&per_page=100")
-
           echo "$ISSUES" > issues.json
-          echo "issues_count=$(echo "$ISSUES" | grep -o '"number"' | wc -l)" >> $GITHUB_OUTPUT
 
       - name: Convert issues to blog posts
         run: |
@@ -63,7 +63,6 @@ for issue in issues:
     html_body = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', r'<img src="\2" alt="\1" style="max-width:100%;">', html_body)
     html_body = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html_body)
     
-    # Wrap lines in paragraphs
     lines = html_body.split('\n')
     new_lines = []
     in_list = False
@@ -136,17 +135,16 @@ print("Done!")
       - name: Check changes
         id: check
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "changes=false" >> $GITHUB_OUTPUT
-          fi
+          echo "Checking for changes..."
+          ls -la _posts/
+          git status --porcelain
 
       - name: Commit and push
-        if: steps.check.outputs.changes == 'true'
+        id: commit
         run: |
+          echo "Changes detected, committing..."
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
           git add .
-          git commit -m "Update blog from issues"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+          git commit -m "Update blog from issues" || echo "No changes to commit"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main || echo "Push failed"
