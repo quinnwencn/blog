@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[C++] Thread race condition problem - Quinn's Blog</title>
+    <style>
+        body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; max-width:800px; margin:0 auto; padding:20px; line-height:1.6; color:#333; }
+        a { color:#0366d6; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .date { color:#6a737d; font-size:0.9em; }
+        .label { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.8em; margin-right:5px; background:#e1e4e8; color:#333; }
+        code { background:#f6f8fa; padding:2px 6px; border-radius:3px; font-family:monospace; }
+        pre { background:#f6f8fa; padding:15px; border-radius:6px; overflow-x:auto; }
+        pre code { background:none; padding:0; }
+        img { max-width:100%; }
+        ul { padding-left:20px; }
+        footer { border-top:1px solid #eee; padding-top:20px; margin-top:40px; color:#6a737d; }
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>[C++] Thread race condition problem</h1>
+    <p class="date">2025-11-13</p>
+    <div class="labels"><span class="label">bug</span> </div>
+    <hr>
+    <div class="content">
+<h1>Overview</h1>
+<p>I’m testing a thread race condition issue using a TCP server and client. The server accepts client connections and stores each connection session in a vector. I’m trying to remove a session when it ends, but doing so causes the program to crash. The error message is shown below:</p>
+<p>``<code></p>
+<p>$ ./build/server       </p>
+<p>Client 0 connected</p>
+<p>Client 0 disconnected</p>
+<p>libc++abi: terminating</p>
+<p>[1]    30429 abort      ./build/server</p>
+</code>`<code>
+<h1>Analysis</h1>
+<p>Let’s first explain the code. I use a Socket to build a TCP server and then run it.</p>
+</code>`<code>Cpp
+<p>int main(int argc, char** argv) {</p>
+<p>    auto socket = std::make_unique<TCPSocket>();</p>
+<p>    TCPServer server(8080, std::make_shared<EchoHandler>());</p>
+<p>    if (!server.Start()) {</p>
+<p>        return -1;</p>
+<p>    }</p>
+<p>    server.AcceptLoop();</p>
+<p>    server.Stop();</p>
+<p>    return 0;</p>
+<p>}</p>
+</code>`<code>
+<p>The server is constructed with an EchoHandler, and Start() makes it listen on the bound socket.</p>
+</code>`<code>Cpp
+<p>bool TCPServer::Start() {</p>
+<p>    if (!socket_->Bind("0.0.0.0", port_)) {</p>
+<p>        return false;</p>
+<p>    }</p>
+<p>    int value = 1;</p>
+<p>    socket_->SetOption(SOL_SOCKET, SO_REUSEADDR, value);</p>
+<p>    return ::listen(socket_->Fd(), SOMAXCONN) == 0;</p>
+<p>}</p>
+</code>`<code>
+<p>Once the server starts, it begins accepting new connections, which are added to a vector:</p>
+</code>`<code>Cpp
+<p>}</p>
+<p>void TCPServer::AcceptLoop() {</p>
+<p>    int clientId = 0;</p>
+<p>    while (true) {</p>
+<p>        struct sockaddr_in clientAddr{};</p>
+<p>        socklen_t addrLen = sizeof(clientAddr);</p>
+<p>        int clientFd = ::accept(socket_->Fd(), (struct sockaddr*)&clientAddr, &addrLen);</p>
+<p>        if (clientFd < 0) {</p>
+<p>            continue;</p>
+<p>        }</p>
+<p>        auto session = std::make_shared<Session>(clientFd, clientId++, handler_, <a href="int fd">this</a> { this->RemoveSession(fd); });</p>
+<p>        sessions_.push_back(session);</p>
+<p>        session->Start();</p>
+<p>    }</p>
+<p>}</p>
+</code>`<code>
+<p>In AcceptLoop, the server continuously accepts new client connections. For each connection, it creates a Session, adds it to the sessions_ vector, and starts it immediately.</p>
+<p>So far, everything works fine. But note that we attach a <strong>lambda callback</strong> to each session — this callback removes the session from the server once it ends.</p>
+<p>Here’s the Session constructor:</p>
+</code>`<code>Cpp
+<p>Session(int connectedFd, int clientId, std::shared_ptr<IProtocolHandler> handler, CloseCallback cb) : </p>
+<p>        ISession(cb),</p>
+<p>        connectedFd_(connectedFd), </p>
+<p>        clientId_(clientId), </p>
+<p>        handler_(handler),</p>
+<p>        running_(false) {}</p>
+</code>`<code>
+<p>When a session starts, it spawns a new thread that runs until the connection closes:</p>
+</code>`<code>CPP
+<p>void Session::Start() {</p>
+<p>    handler_->OnConnect(clientId_);</p>
+<p>    running_ = true;</p>
+<p>    runThread_ = std::thread(&Session::Run, this);</p>
+<p>}</p>
+<p>void Session::Run() {</p>
+<p>    std::array<char, 1024> buffer {};</p>
+<p>    while (running_.load()) {</p>
+<p>        ssize_t bytesRead = ::read(connectedFd_, buffer.data(), buffer.size());</p>
+<p>        if (bytesRead <= 0) {</p>
+<p>            break;</p>
+<p>        }</p>
+<p>        buffer[bytesRead] = '\0';</p>
+<p>        handler_->OnMessage(clientId_, std::string_view(buffer.data(), bytesRead));</p>
+<p>    }</p>
+<p>    callback_(Fd());</p>
+<p>}</p>
+</code>`<code>
+<p>The problem occurs when the loop breaks and the callback attempts to remove the current session from the server’s vector — this triggers the session’s destruction while its thread is still running, causing a crash.</p>
+<h1>How to fix it.</h1>
+<p>There are two main approaches to solve this issue.</p>
+<h2>Deconstruct the session in a new thread</h2>
+<p>The crash happens because the session is destroyed in one thread while it’s still running in another.</p>
+<p>To fix this, we can ensure that the session remains alive until the thread truly ends.</p>
+<h3>Step 1: Session inherits from enable_shared_from_this</h3>
+</code>`<code>Cpp
+<p>class Session : public ISession, public std::enable_shared_from_this<Session> {</p>
+<p>public:</p>
+<p>    Session(int connectedFd, int clientId, std::shared_ptr<IProtocolHandler> handler, CloseCallback cb) : </p>
+<p>        ISession(cb),</p>
+<p>        connectedFd_(connectedFd), </p>
+<p>        clientId_(clientId), </p>
+<p>        handler_(handler),</p>
+<p>        running_(false) {}</p>
+<p>    ~Session() override;</p>
+<p> // other code</p>
+</code>`<code>
+<p>This will make the Session a shared object,  when the deconstruction function is called, it will calculate the shared times, unless it decreases to 0, it won't really call ~Session.</p>
+<h3>Step 2: Create a shared self and remove itself in the main thread:</h3>
+</code>`<code>Cpp
+<p>void Session::Run() {</p>
+<p>    std::array<char, 1024> buffer {};</p>
+<p>    while (running_.load()) {</p>
+<p>        ssize_t bytesRead = ::read(connectedFd_, buffer.data(), buffer.size());</p>
+<p>        if (bytesRead <= 0) {</p>
+<p>            break;</p>
+<p>        }</p>
+<p>        handler_->OnMessage(clientId_, std::string_view(buffer.data(), bytesRead));</p>
+<p>    }</p>
+<p>    running_ = false;</p>
+<p>    // Protect this from being deleted</p>
+<p>    auto self = shared_from_this();</p>
+<p>    std::thread([cb = closeCallback_, fd = connectedFd_, self]() {</p>
+<p>        cb(fd);  // 让 server 删除 session</p>
+<p>    }).detach();</p>
+<p>}</p>
+</code>``
+<h2>Using Epoll or Poll + Nonblocking IO</h2>
+<p>In the Run funciton of TCP server, change it to nonblock mode and remove a session when it ends.</p>
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #127</p>
+    </footer>
+</body>
+</html>
