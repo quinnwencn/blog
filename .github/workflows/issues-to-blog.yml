@@ -1,0 +1,279 @@
+name: Issues to Blog
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  workflow_dispatch:
+
+jobs:
+  convert-issues-to-posts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BlogSeret }}
+
+      - name: Fetch open issues
+        id: fetch-issues
+        run: |
+          # Fetch all open issues
+          ISSUES=$(curl -s \
+            -H "Authorization: token ${{ secrets.BlogSeret }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&per_page=100")
+
+          echo "$ISSUES" > issues.json
+          echo "issues_count=$(echo "$ISSUES" | grep -o '"number"' | wc -l)" >> $GITHUB_OUTPUT
+
+      - name: Convert issues to blog posts
+        run: |
+          # Create _posts directory
+          mkdir -p _posts
+
+          # Parse issues and create blog posts
+          python3 << 'PYTHON_SCRIPT'
+import json
+import re
+from datetime import datetime
+
+# Read issues
+with open('issues.json', 'r') as f:
+    issues = json.load(f)
+
+for issue in issues:
+    number = issue['number']
+    title = issue['title']
+    body = issue['body'] or ''
+    created_at = issue['created_at']
+    labels = [l['name'] for l in issue.get('labels', [])]
+    
+    # Parse date
+    date = created_at[:10]  # YYYY-MM-DD
+    
+    # Clean title for filename (remove special chars, keep Chinese and English)
+    filename_title = re.sub(r'[^\w\s\u4e00-\u9fff-]', '', title)
+    filename_title = re.sub(r'\s+', '-', filename_title).strip('-')
+    
+    filename = f"_posts/{date}-{filename_title}.html"
+    
+    # Convert Markdown body to simple HTML
+    html_body = body
+    
+    # Convert headers
+    html_body = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html_body, flags=re.MULTILINE)
+    html_body = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html_body, flags=re.MULTILINE)
+    html_body = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html_body, flags=re.MULTILINE)
+    
+    # Convert bold and italic
+    html_body = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html_body)
+    html_body = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html_body)
+    
+    # Convert inline code
+    html_body = re.sub(r'`([^`]+)`', r'<code>\1</code>', html_body)
+    
+    # Convert code blocks
+    html_body = re.sub(r'```(\w+)?\n([\s\S]*?)```', r'<pre><code>\2</code></pre>', html_body)
+    
+    # Convert lists
+    html_body = re.sub(r'^- (.+)$', r'<li>\1</li>', html_body, flags=re.MULTILINE)
+    html_body = re.sub(r'(<li>.*</li>\n?)+', r'<ul>\g<0></ul>', html_body)
+    
+    # Convert images
+    html_body = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', r'<img src="\2" alt="\1" style="max-width:100%;">', html_body)
+    
+    # Convert links
+    html_body = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html_body)
+    
+    # Convert paragraphs (lines that aren't HTML tags)
+    lines = html_body.split('\n')
+    new_lines = []
+    in_code_block = False
+    in_list = False
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('<pre>') or stripped.startswith('<ul>') or stripped.startswith('<li>') or stripped.startswith('<h'):
+            if not in_list and '<ul>' in stripped:
+                in_list = True
+            new_lines.append(line)
+        elif stripped == '':
+            if in_list:
+                in_list = False
+                new_lines.append('</ul>')
+            new_lines.append('')
+        elif not stripped.startswith('</'):
+            if in_list:
+                in_list = False
+                new_lines.append('</ul>')
+            new_lines.append(f'<p>{line}</p>')
+        else:
+            new_lines.append(line)
+    
+    html_body = '\n'.join(new_lines)
+    
+    # Create full HTML file
+    html_content = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - Quinn's Blog</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }}
+        a {{ color: #0366d6; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        .date {{ color: #6a737d; font-size: 0.9em; }}
+        .labels {{ margin: 10px 0; }}
+        .label {{ 
+            display: inline-block; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 0.8em;
+            margin-right: 5px;
+            background: #e1e4e8;
+            color: #333;
+        }}
+        code {{ 
+            background: #f6f8fa; 
+            padding: 2px 6px; 
+            border-radius: 3px;
+            font-family: monospace;
+        }}
+        pre {{ 
+            background: #f6f8fa; 
+            padding: 15px; 
+            border-radius: 6px; 
+            overflow-x: auto;
+        }}
+        pre code {{ background: none; padding: 0; }}
+        img {{ max-width: 100%; height: auto; }}
+        ul {{ padding-left: 20px; }}
+        li {{ margin-bottom: 5px; }}
+        footer {{ border-top: 1px solid #eee; padding-top: 20px; margin-top: 40px; color: #6a737d; }}
+    </style>
+</head>
+<body>
+    <p><a href="index.html">← Back to Home</a></p>
+    <h1>{title}</h1>
+    <p class="date">{date}</p>
+    <div class="labels">
+'''
+    
+    # Add labels
+    for label in labels:
+        html_content += f'        <span class="label">{label}</span>\n'
+    
+    html_content += f'''    </div>
+    <hr>
+    <div class="content">
+{html_body}
+    </div>
+    <footer>
+        <p>© 2026 Quinn's Blog. Generated from GitHub Issue #{number}</p>
+    </footer>
+</body>
+</html>'''
+
+    # Write file
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    
+            print(f"Created: {filename}")
+
+print("All issues converted to blog posts!")
+          PYTHON_SCRIPT
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected, will commit and push"
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "No changes, skipping commit"
+          fi
+
+      - name: Commit and push
+        if: steps.check-changes.outputs.changes == 'true'
+        run: |
+          git config --global user.email "quinnwencn@gmail.com"
+          git config --global user.name "GitHub Actions"
+          git add .
+          git commit -m "Update blog posts from issues"
+          git push origin main
+
+      - name: Update index.html
+        if: steps.check-changes.outputs.changes == 'true'
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+import json
+import os
+import re
+from datetime import datetime
+
+# Read issues
+with open('issues.json', 'r') as f:
+    issues = json.load(f)
+
+# Sort by created date (newest first)
+issues.sort(key=lambda x: x['created_at'], reverse=True)
+
+# Generate post list
+posts_html = ""
+for issue in issues[:10]:  # Show latest 10
+    number = issue['number']
+    title = issue['title']
+    created_at = issue['created_at'][:10]
+    labels = [l['name'] for l in issue.get('labels', [])]
+    
+    # Clean title for filename
+    filename_title = re.sub(r'[^\w\s\u4e00-\u9fff-]', '', title)
+    filename_title = re.sub(r'\s+', '-', filename_title).strip('-')
+    
+    posts_html += f'''        <div class="post">
+            <h3><a href="_posts/{created_at}-{filename_title}.html">{title}</a></h3>
+            <p class="post-date">{created_at}</p>
+'''
+
+    if labels:
+        posts_html += '            <div class="labels">\n'
+        for label in labels:
+            posts_html += f'                <span class="label">{label}</span>\n'
+        posts_html += '            </div>\n'
+    
+    posts_html += '        </div>\n'
+
+# Read current index.html
+with open('index.html', 'r') as f:
+    index_content = f.read()
+
+# Replace posts section
+pattern = r'<section>\s*<h2>Recent Posts</h2>\s*<div class="posts">.*?</section>'
+replacement = f'<section>\n            <h2>Recent Posts</h2>\n            <div class="posts">\n{posts_html}            </div>\n        </section>'
+
+new_index = re.sub(pattern, replacement, index_content, flags=re.DOTALL)
+
+# Write updated index
+with open('index.html', 'w') as f:
+    f.write(new_index)
+
+print("Index updated!")
+          PYTHON_SCRIPT
+
+      - name: Commit updated index
+        if: steps.check-changes.outputs.changes == 'true'
+        run: |
+          git add index.html
+          git commit -m "Update index with latest posts"
+          git push origin main
