@@ -1,0 +1,32 @@
+title: Quinn's Blog
+description: Personal blog by Quinn
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "https://quinnwencn.github.io" # the base hostname & protocol for your site
+github_username: quinnwencn
+
+# Build settings
+theme: minima
+plugins:
+  - jekyll-feed
+
+# Minima theme settings
+minima:
+  skin: auto
+  date_format: "%Y-%m-%d"
+  social_links:
+    - platform: github
+      user_url: "https://github.com/quinnwencn"
+    - platform: twitter
+      user_url: "https://twitter.com/quinnwencn"
+    - platform: email
+      user_url: "mailto:quinnwencn@gmail.com"
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
