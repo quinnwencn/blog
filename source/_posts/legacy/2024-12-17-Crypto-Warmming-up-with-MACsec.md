@@ -5,7 +5,7 @@ tags:
   - "Crypto"
   - "MACsec"
 categories:
-  - "AI Infra"
+  - "Security Crypto"
 ---
 
 <h1>Overview

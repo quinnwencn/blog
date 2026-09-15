@@ -5,7 +5,7 @@ tags:
   - "C/C++"
   - "STL"
 categories:
-  - "AI Infra"
+  - "Systems C++"
 ---
 
 <p class="date">2025-02-10</p>

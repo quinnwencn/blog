@@ -8,7 +8,7 @@ tags:
   - "Rootfs"
   - "BSP"
 categories:
-  - "AI Infra"
+  - "Embedded Linux"
 ---
 
 <h1>Problem Summary
