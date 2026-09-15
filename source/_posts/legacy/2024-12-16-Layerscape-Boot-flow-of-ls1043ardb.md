@@ -9,7 +9,7 @@ tags:
   - "u-boot"
   - "SecureBoot"
 categories:
-  - "Systems C++"
+  - "Embedded Linux"
 ---
 
 ![image](https://github.com/user-attachments/assets/1855f30f-fe1d-416a-92bc-97afe4b8197e)

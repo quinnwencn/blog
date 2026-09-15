@@ -6,7 +6,7 @@ tags:
   - "TEE"
   - "ARMv8"
 categories:
-  - "Systems C++"
+  - "Embedded Linux"
 ---
 
 # ATF的启动流程
