@@ -1,0 +1,8 @@
+navbar:
+  blog_title: Quinn's Blog
+  menu:
+    - { key: "home", link: "/", icon: "iconfont icon-home-fill", name: "Home" }
+    - { key: "posts", link: "/posts/", icon: "iconfont icon-archive-fill", name: "Posts" }
+    - { key: "category", link: "/categories/", icon: "iconfont icon-category-fill", name: "Categories" }
+    - { key: "tag", link: "/tags/", icon: "iconfont icon-tags-fill", name: "Tags" }
+    - { key: "about", link: "/about/", icon: "iconfont icon-user-fill", name: "About" }

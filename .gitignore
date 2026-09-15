@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.env.example
+node_modules/
+public/
+.deploy_git/
+db.json
+.hexo/
+_config.github.yml
+_multiconfig.yml
+npm-debug.log*
+
+# Legacy deployment files that are not part of the Hexo blog source.
+Caddyfile
+docker-compose.yml
+k8s/
+/legacy/

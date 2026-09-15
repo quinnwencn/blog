@@ -1,0 +1,34 @@
+{
+  "name": "quinnwencn-blog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Quinn technical blog powered by Hexo, Markdown, and GitHub Issues.",
+  "hexo": {
+    "version": "7.3.0"
+  },
+  "scripts": {
+    "hexo": "node node_modules/hexo-cli/bin/hexo",
+    "clean": "npm run hexo -- clean",
+    "build": "npm run sync:issues && npm run hexo -- generate",
+    "build:pages": "npm run sync:issues && node tools/write-pages-config.mjs && npm run hexo -- generate --config _config.yml,_config.github.yml",
+    "server": "npm run hexo -- server",
+    "new": "npm run hexo -- new post",
+    "sync:issues": "node tools/sync-issues.mjs"
+  },
+  "dependencies": {
+    "hexo": "^7.3.0",
+    "hexo-generator-archive": "^2.0.0",
+    "hexo-generator-category": "^2.0.0",
+    "hexo-generator-index": "^4.0.0",
+    "hexo-generator-tag": "^2.0.0",
+    "hexo-renderer-ejs": "^2.0.0",
+    "hexo-renderer-markdown-it": "^7.1.1",
+    "hexo-renderer-stylus": "^3.0.1",
+    "hexo-server": "^3.0.0",
+    "hexo-theme-fluid": "^1.9.8",
+    "markdown-it-mathjax3": "^5.2.0"
+  },
+  "devDependencies": {
+    "hexo-cli": "^4.3.2"
+  }
+}
