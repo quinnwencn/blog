@@ -7,100 +7,115 @@ categories:
   - "Systems C++"
 ---
 
-<p>Though you are not an Android developer, you might need to build a so or executable for the Android platform. This tutorial will teach you how to set up the NDK environment and build a C++ project using NDK (Android Development Kit).</p>
-<h1>Install NDK</h1>
-<p>Download the NDK from <a href="https://developer.android.com/ndk/downloads?hl=en">NDK Downloads</a> and then unzip it to your preferred directory:</p>
-<p>``<code></p>
-<p>cd ~/bin</p>
-<p>wget https://developer.android.com/ndk/downloads?hl=en#:~:text=android%2D-,ndk,-%2Dr27d%2Dlinux.zip</p>
-<p>unzip android-ndk-r27d-linux.zip</p>
-</code>`<code>
-<p>Add the path of NDK to your environment:</p>
-</code>`<code>
-<p>vim ~/.zshrc</p>
-<h1>append the following context to the end of the file</h1>
-<p>export NDK_HOME=/home/yourname/bin/android-ndk-r27d</p>
-<p>export PATH=$NDK_HOME:$PATH</p>
-</code>`<code>
-<p>Run </code>ndk-build --verison<code> to verify that the NDK environment is setup good. The output should be as the same as following:</p>
-</code>`<code>
-<p>$ ndk-build --version</p>
-<p>GNU Make 4.3</p>
-<p>Built for x86_64-pc-linux-gnu</p>
-<p>Copyright (C) 1988-2020 Free Software Foundation, Inc.</p>
-<p>License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html></p>
-<p>This is free software: you are free to change and redistribute it.</p>
-<p>There is NO WARRANTY, to the extent permitted by law.</p>
-</code>`<code>
-<h1>Test NDK with an example</h1>
-<p>Write a simple program to verify that the ndk works well:</p>
-<p>C++ source code: </p>
-</code>`<code>Cpp
-<p>#include <iostream></p>
-<p>using namespace std;</p>
-<p>int main(int argc, char** argv) {</p>
-<p>    cout << "hello, world!" << endl;</p>
-<p>    return 0;</p>
-<p>}</p>
-</code>`<code>
-<p>CMakeLists.txt source code: </p>
-</code>`<code>CMake
-<p>cmake_minimum_required(VERSION 3.20)</p>
-<p>project(ndk_test)</p>
-<p>add_executable(${PROJECT_NAME} hello.cpp)</p>
-</code>`<code>
-<p>And build it using android toolchain:</p>
-</code>`<code>bash
-<p>cmake  -Bbuild -DCMAKE_TOOLCHAIN_FILE=$NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$NDK_HOME -DANDROID_ABI=armeabi-v7a -DANDROID_NATIVE_API_LEVEL=27</p>
-<p>cmake --build build</p>
-</code>`<code>
-<h1>Build </code>Aktualizr<code> using NDK</h1>
-</code>Aktualizr<code> is an open source OTA solution written in C++.  Now I will use the same way to compile it and fix the bugs during the compilation.
-<h2>Boost not found</h2>
-<p>NDK has no Boost support by default, which is a dependency of </code>Aktualizr<code>. Therefore, this error will occur when compiling </code>Aktualizr<code>.</p>
-</code>`<code>
-<p>cmake -DCMAKE_TOOLCHAIN=/$NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$NDK_HOME -DANDROID=armeabi-v7a -DANDROID_PLATFORM=android-27 -Bbuild</p>
-<p>-- The C compiler identification is GNU 13.3.0</p>
-<p>-- The CXX compiler identification is GNU 13.3.0</p>
-<p>-- Detecting C compiler ABI info</p>
-<p>-- Detecting C compiler ABI info - done</p>
-<p>-- Check for working C compiler: /usr/bin/cc - skipped</p>
-<p>-- Detecting C compile features</p>
-<p>-- Detecting C compile features - done</p>
-<p>-- Detecting CXX compiler ABI info</p>
-<p>-- Detecting CXX compiler ABI info - done</p>
-<p>-- Check for working CXX compiler: /usr/bin/c++ - skipped</p>
-<p>-- Detecting CXX compile features</p>
-<p>-- Detecting CXX compile features - done</p>
-<p>-- No CMAKE_BUILD_TYPE specified, defaulting to Release</p>
-<p>CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):</p>
-<p>  Could NOT find Boost (missing: Boost_INCLUDE_DIR log_setup log system</p>
-<p>  filesystem program_options) (Required is at least version "1.58.0")</p>
-<p>Call Stack (most recent call first):</p>
-<p>  /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:600 (_FPHSA_FAILURE_MESSAGE)</p>
-<p>  /usr/share/cmake-3.28/Modules/FindBoost.cmake:2393 (find_package_handle_standard_args)</p>
-<p>  CMakeLists.txt:81 (find_package)</p>
-<p>-- Configuring incomplete, errors occurred!</p>
-</code>`<code>
-<p>To fix this problem, we need to rebuilt the <a href="https://github.com/moritz-wundke/Boost-for-Android">boost-for-android</a> using the following command:</p>
-</code>`<code>bash
-<p> ./build-android.sh \</p>
-<p>  --arch=arm64-v8a \</p>
-<p>  --boost=1.82.0 \</p>
-<p>  --target-version=27 \</p>
-<p>  --layout=system \</p>
-<p>  --with-libraries=log,filesystem,system,program_options \</p>
-<p>  $NDK_HOME</p>
-</code>`<code>
-</code>--layout=system<code> to remove the compiler and threads suffix info in the output library. And then rebuild </code>aktualizr<code> to recompile:
-</code>`<code>bash
-<p>cmake -DBoost_NO_SYSTEM_PATHS=TRUE \</p>
-<p>        -DCMAKE_TOOLCHAIN_FILE=$NDK_HOME//build/cmake/android.toolchain.cmake \</p>
-<p>        -DBOOST_ROOT=/home/yourname/work/workaround/deps/Boost-for-Android/build/out/arm64-v8a/ \</p>
-<p>        -DBoost_INCLUDE_DIR=${BOOST_ROOT}/include \</p>
-<p>        -DBoost_LIBRARY_DIR=${BOOST_ROOT}/lib \</p>
-<p>        -DBoost_ADDITIONAL_VERSIONS="1.82" \</p>
-<p>        -DBoost_COMPILER:STRING=-clang \</p>
-<p>        -DBoost_USE_MULTITHREADED=ON \</p>
-<p>        -Bbuild</p>
-</code>``
+Though you are not an Android developer, you might need to build a so or executable for the Android platform. This tutorial will teach you how to set up the NDK environment and build a C++ project using NDK (Android Development Kit).
+
+# Install NDK
+Download the NDK from [NDK Downloads](https://developer.android.com/ndk/downloads?hl=en) and then unzip it to your preferred directory:
+```
+cd ~/bin
+wget https://developer.android.com/ndk/downloads?hl=en#:~:text=android%2D-,ndk,-%2Dr27d%2Dlinux.zip
+unzip android-ndk-r27d-linux.zip
+```
+Add the path of NDK to your environment:
+```
+vim ~/.zshrc
+# append the following context to the end of the file
+export NDK_HOME=/home/yourname/bin/android-ndk-r27d
+export PATH=$NDK_HOME:$PATH
+```
+Run `ndk-build --verison` to verify that the NDK environment is setup good. The output should be as the same as following:
+```
+$ ndk-build --version
+GNU Make 4.3
+Built for x86_64-pc-linux-gnu
+Copyright (C) 1988-2020 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+```
+
+# Test NDK with an example
+Write a simple program to verify that the ndk works well:
+C++ source code: 
+```Cpp
+#include <iostream>
+
+using namespace std;
+
+int main(int argc, char** argv) {
+    cout << "hello, world!" << endl;
+    return 0;
+}
+```
+
+CMakeLists.txt source code: 
+```CMake
+cmake_minimum_required(VERSION 3.20)
+
+project(ndk_test)
+
+add_executable(${PROJECT_NAME} hello.cpp)
+```
+
+And build it using android toolchain:
+```bash
+cmake  -Bbuild -DCMAKE_TOOLCHAIN_FILE=$NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$NDK_HOME -DANDROID_ABI=armeabi-v7a -DANDROID_NATIVE_API_LEVEL=27
+
+cmake --build build
+```
+
+# Build `Aktualizr` using NDK
+`Aktualizr` is an open source OTA solution written in C++.  Now I will use the same way to compile it and fix the bugs during the compilation.
+
+## Boost not found
+NDK has no Boost support by default, which is a dependency of `Aktualizr`. Therefore, this error will occur when compiling `Aktualizr`.
+```
+cmake -DCMAKE_TOOLCHAIN=/$NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$NDK_HOME -DANDROID=armeabi-v7a -DANDROID_PLATFORM=android-27 -Bbuild
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- No CMAKE_BUILD_TYPE specified, defaulting to Release
+CMake Error at /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:230 (message):
+  Could NOT find Boost (missing: Boost_INCLUDE_DIR log_setup log system
+  filesystem program_options) (Required is at least version "1.58.0")
+Call Stack (most recent call first):
+  /usr/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake:600 (_FPHSA_FAILURE_MESSAGE)
+  /usr/share/cmake-3.28/Modules/FindBoost.cmake:2393 (find_package_handle_standard_args)
+  CMakeLists.txt:81 (find_package)
+
+
+-- Configuring incomplete, errors occurred!
+```
+To fix this problem, we need to rebuilt the [boost-for-android](https://github.com/moritz-wundke/Boost-for-Android) using the following command:
+```bash
+ ./build-android.sh \
+  --arch=arm64-v8a \
+  --boost=1.82.0 \
+  --target-version=27 \
+  --layout=system \
+  --with-libraries=log,filesystem,system,program_options \
+  $NDK_HOME
+```
+`--layout=system` to remove the compiler and threads suffix info in the output library. And then rebuild `aktualizr` to recompile:
+```bash
+cmake -DBoost_NO_SYSTEM_PATHS=TRUE \
+        -DCMAKE_TOOLCHAIN_FILE=$NDK_HOME//build/cmake/android.toolchain.cmake \
+        -DBOOST_ROOT=/home/yourname/work/workaround/deps/Boost-for-Android/build/out/arm64-v8a/ \
+        -DBoost_INCLUDE_DIR=${BOOST_ROOT}/include \
+        -DBoost_LIBRARY_DIR=${BOOST_ROOT}/lib \
+        -DBoost_ADDITIONAL_VERSIONS="1.82" \
+        -DBoost_COMPILER:STRING=-clang \
+        -DBoost_USE_MULTITHREADED=ON \
+        -Bbuild
+```
+
+[source issue](https://github.com/quinnwencn/blog/issues/126)

@@ -7,9 +7,12 @@ categories:
   - "Embedded Linux"
 ---
 
-<h1>背景</h1>
-<p>嵌入式设备，rootfs开启了dm-verity，mount为read only，无法通过修改<code>/etc/resolv.conf</code>，但仍然需要增加自定义DNS服务器。</p>
-<h1>解决办法</h1>
-<p>``<code></p>
-<p>echo "nameserver xx.xx.xx.xx" | sudo resolvconf -a interface(eth 0)</p>
-</code>``
+# 背景
+嵌入式设备，rootfs开启了dm-verity，mount为read only，无法通过修改`/etc/resolv.conf`，但仍然需要增加自定义DNS服务器。
+
+# 解决办法
+```
+echo "nameserver xx.xx.xx.xx" | sudo resolvconf -a interface(eth 0)
+```
+
+[source issue](https://github.com/quinnwencn/blog/issues/122)

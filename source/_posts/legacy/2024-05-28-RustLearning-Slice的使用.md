@@ -8,4 +8,6 @@ categories:
   - "Rust"
 ---
 
-<p>Slice是如何定義的，又該如何使用？Slice有哪些常用的方法？</p>
+Slice是如何定義的，又該如何使用？Slice有哪些常用的方法？
+
+[source issue](https://github.com/quinnwencn/blog/issues/32)

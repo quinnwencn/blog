@@ -8,9 +8,6 @@ categories:
   - "Systems C++"
 ---
 
-<p class="date">2025-02-10</p>
-    <div class="labels"><span class="label">C/C++</span> <span class="label">STL</span> </div>
-    <hr>
-    <div class="content">
 
-    </div>
+
+[source issue](https://github.com/quinnwencn/blog/issues/109)

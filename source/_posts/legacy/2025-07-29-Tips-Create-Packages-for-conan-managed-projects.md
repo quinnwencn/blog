@@ -7,9 +7,6 @@ categories:
   - "Tooling"
 ---
 
-<p class="date">2025-07-29</p>
-    <div class="labels"><span class="label">conan</span> </div>
-    <hr>
-    <div class="content">
 
-    </div>
+
+[source issue](https://github.com/quinnwencn/blog/issues/120)

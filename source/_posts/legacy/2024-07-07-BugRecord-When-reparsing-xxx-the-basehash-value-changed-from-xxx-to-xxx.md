@@ -7,17 +7,13 @@ categories:
   - "Embedded Linux"
 ---
 
-<p>I built yocto project before, now I change some configuration and try to rebuild it by:
-</p>
-<p>``<code>bash
-</p>
-<p>bitbake recipename -c cleanall
-</p>
-<p>bitbake recipename -c cleansstate
-</p>
-<p>bitbake recipename
-</p>
-</code>``
-<p>And the error occurs:
-</p>
-<img src="https://github.com/quinnwencn/blog/assets/143626366/3b5b9176-6585-4e87-a47f-1c6848213928" alt="image" style="max-width:100%;">
+I built yocto project before, now I change some configuration and try to rebuild it by:
+```bash
+bitbake recipename -c cleanall
+bitbake recipename -c cleansstate
+bitbake recipename
+```
+And the error occurs:
+![image](https://github.com/quinnwencn/blog/assets/143626366/3b5b9176-6585-4e87-a47f-1c6848213928)
+
+[source issue](https://github.com/quinnwencn/blog/issues/55)

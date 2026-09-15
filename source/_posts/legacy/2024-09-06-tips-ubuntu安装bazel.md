@@ -7,24 +7,18 @@ categories:
   - "Embedded Linux"
 ---
 
-<li>增加bazel的apt源
-</li>
-<p>``<code>bash
-</p>
-<p>echo "deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list
-</p>
-<p>curl https://bazel.build/bazel-release.pub.gpg | sudo apt-key add -
-</p>
-</code>`<code>
-<li>使用apt 安装bazel
-</li>
-</code>`<code>bash
-<p>sudo apt update && sudo apt install bazel
-</p>
-</code>`<code>
-<li>升级到最新版本
-</li>
-</code>`<code>bash
-<p>sudo apt upgrade bazel
-</p>
-</code>``
+1. 增加bazel的apt源
+```bash
+echo "deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list
+curl https://bazel.build/bazel-release.pub.gpg | sudo apt-key add -
+```
+2. 使用apt 安装bazel
+```bash
+sudo apt update && sudo apt install bazel
+```
+3. 升级到最新版本
+```bash
+sudo apt upgrade bazel
+```
+
+[source issue](https://github.com/quinnwencn/blog/issues/68)

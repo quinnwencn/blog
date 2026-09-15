@@ -7,10 +7,12 @@ categories:
   - "Systems C++"
 ---
 
-<p>CMake管理的工程，可以使用CPack打包成一个安装包，具体命令：</p>
-<p>``<code>cmake</p>
-<p>cmake -B build -DCMAKE_BUILD_TYPE=Release</p>
-<p>cmake --build build --config Release</p>
-<p>cmake --install build --prefix build/install</p>
-<p>cpack -D CPACK_NSIS_EXECUTABLE="makensis" --config build/CPackConfig.cmake</p>
-</code>``
+CMake管理的工程，可以使用CPack打包成一个安装包，具体命令：
+```cmake
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+cmake --install build --prefix build/install
+cpack -D CPACK_NSIS_EXECUTABLE="makensis" --config build/CPackConfig.cmake
+```
+
+[source issue](https://github.com/quinnwencn/blog/issues/121)

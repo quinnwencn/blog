@@ -7,4 +7,6 @@ categories:
   - "Rust"
 ---
 
-<p>Rust如何讀取文件、寫入文件、追加文件？能不能像C或者C++一樣使用mmap？</p>
+Rust如何讀取文件、寫入文件、追加文件？能不能像C或者C++一樣使用mmap？
+
+[source issue](https://github.com/quinnwencn/blog/issues/33)

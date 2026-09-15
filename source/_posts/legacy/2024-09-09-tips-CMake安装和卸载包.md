@@ -7,16 +7,13 @@ categories:
   - "Systems C++"
 ---
 
-<li>从源码安装
-</li>
-<p>``<code> bash
-</p>
-<p>cmake --build build --target install
-</p>
-</code>`<code>
-<li>卸载从源码安装的包：
-</li>
-</code>`<code>bash
-<p>cat build/install_manifest.txt | sudo xargs rm
-</p>
-</code>``
+1. 从源码安装
+``` bash
+cmake --build build --target install
+```
+2. 卸载从源码安装的包：
+```bash
+cat build/install_manifest.txt | sudo xargs rm
+```
+
+[source issue](https://github.com/quinnwencn/blog/issues/69)

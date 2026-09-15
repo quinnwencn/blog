@@ -7,45 +7,31 @@ categories:
   - "Security Crypto"
 ---
 
-<li>Download source code from <a href="https://github.com/opendnssec/SoftHSMv2/tags">softHSM release page</a>
-</li>
-<p>``<code>bash
-</p>
-<p>wget https://github.com/opendnssec/SoftHSMv2/archive/refs/tags/2.6.1.tar.gz
-</p>
-<p>tar -xvf 2.6.1.tar.gz
-</p>
-</code>`<code>
-<li> Compile the source code
-</li>
-</code>`<code>bash
-<p>cd SoftHSMv2-2.6.1
-</p>
-<p>./autogen.sh
-</p>
-<p>./configure --prefix=/opt/softhsm
-</p>
-<p>make -j4
-</p>
-<p>sudo make install
-</p>
-</code>`<code>
-<li>Add softhsm binary to PATH
-</li>
-</code>`<code>bash
-<p>vim ~/.bashrc
-</p>
-<h1>add following line to ~/.bashrc
-</h1>
-<p>export PATH=$PATH:/opt/softhsm/bin
-</p>
-</code>`<code>
-<li>Now softhsm2-util is available on your machine:
-</li>
-<img src="https://github.com/user-attachments/assets/eb58e711-ce81-4312-b64b-b5c5589ad30c" alt="image" style="max-width:100%;">
-<li>Install opensc
-</li>
-</code>`<code>bash
-<p>sudo apt install opensc
-</p>
-</code>``
+1. Download source code from [softHSM release page](https://github.com/opendnssec/SoftHSMv2/tags)
+```bash
+wget https://github.com/opendnssec/SoftHSMv2/archive/refs/tags/2.6.1.tar.gz
+
+tar -xvf 2.6.1.tar.gz
+```
+2.  Compile the source code
+```bash
+cd SoftHSMv2-2.6.1
+./autogen.sh
+./configure --prefix=/opt/softhsm
+make -j4
+sudo make install
+```
+3. Add softhsm binary to PATH
+```bash
+vim ~/.bashrc
+# add following line to ~/.bashrc
+export PATH=$PATH:/opt/softhsm/bin
+```
+4. Now softhsm2-util is available on your machine:
+![image](https://github.com/user-attachments/assets/eb58e711-ce81-4312-b64b-b5c5589ad30c)
+5. Install opensc 
+```bash
+sudo apt install opensc
+```
+
+[source issue](https://github.com/quinnwencn/blog/issues/47)
