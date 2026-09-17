@@ -82,4 +82,82 @@ $$
 
 ![二元一次方程组的列向量图](the_geometry_of_linear_equations/column_picture_of_two_unknown.png)
 
-从column picture可以看出，通过选取不同的(x, y)实际上我们的结果可以铺满整个平面。
+从column picture可以看出，通过选取不同的(x, y)，实际上我们的结果可以铺满整个平面。
+
+## 三元一次方程
+
+三元一次方程如果有解，实际上就是在一个三维空间里寻找一个符合条件的点。我们先看三元一次方程组：
+
+$$
+2x - y = 0\\
+-x + 2y - z = -1\\
+-3y + 4z = 4
+$$
+
+用矩阵乘法表示就是：$AX = B$. 其中：
+
+$$
+A = \begin{bmatrix}
+2, -1, 0\\
+1, 2, -1\\
+0, -3, 4
+\end{bmatrix}
+$$
+
+$$
+X = \begin{bmatrix}
+x\\
+y\\
+z
+\end{bmatrix}
+$$
+
+$$
+B = \begin{bmatrix}
+0\\
+-1\\
+4
+\end{bmatrix}
+$$
+
+### Row Picture
+
+对应的row picture就是一个三维坐标系下，三个方程各自代表一个平面：
+
+![三元一次方程组行向量图](the_geometry_of_linear_equations/row_picture_of_three_unknown.png)
+
+在row picture的几何表示里，如果有两个平面平行，那么我们就无法得到唯一解。
+
+### Column Picture
+
+在列向量视角里，就变成了：
+
+$$
+x \begin{bmatrix}
+2\\
+-1\\
+0
+\end{bmatrix} 
++ y 
+\begin{bmatrix}
+-1\\
+2\\
+3
+\end{bmatrix}
++ z \begin{bmatrix}
+0\\
+-1\\
+4
+\end{bmatrix}
+= \begin{bmatrix}
+0\\
+-1\\
+4
+\end{bmatrix}
+$$
+
+Column Picture也就是三维坐标系里三个向量的不同倍数组合，得到第四个坐标：
+
+![三元一次方程组列向量图](the_geometry_of_linear_equations/column_picture_of_three_unknown.png)
+
+当然，从这个列向量中，刚好结果就是(0, 0, 1). 实际上，通过组合不同的(x, y, z)，可以得到覆盖全三维的点。（前提是这三个向量不在一个平面上）
