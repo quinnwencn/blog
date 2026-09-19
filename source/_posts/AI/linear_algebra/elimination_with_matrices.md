@@ -1,6 +1,6 @@
 ---
 title: 矩阵消元法
-date: 2026-09-18 00:00:00
+date: 2026-09-18 12:00:00
 tags:
   - linear algebra
   - math
