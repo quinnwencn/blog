@@ -1,3 +1,13 @@
+---
+title: 矩阵乘法与逆矩阵
+date: 2026-10-01 12:00:00
+tags:
+  - linear algebra
+  - math
+categories:
+  - AI Infra
+---
+
 矩阵的乘法可以有多种理解：行乘以列、矩阵乘以列，行乘以矩阵，以及列乘以行。
 
 ## 行乘列
@@ -16,7 +26,7 @@ $$
 
 ## 矩阵乘以列
 
-在[线性方程的几何表示]([线性方程的几何表示 - Quinn&#39;s Blog](https://quinnwencn.github.io/blog/2026/09/15/AI/linear_algebra/the_geometry_of_linear_equations/))中，我们讨论过一个矩阵乘以列，得到的就是一个列,因此我们可以用$A$矩阵，乘以$B$矩阵的每一列，从而得到矩阵$C$:
+在[线性方程的几何表示](https://quinnwencn.github.io/blog/2026/09/15/AI/linear_algebra/the_geometry_of_linear_equations/)中，我们讨论过一个矩阵乘以列，得到的就是一个列,因此我们可以用$A$矩阵，乘以$B$矩阵的每一列，从而得到矩阵$C$:
 
 $$
 C_i = A * (Col_iofB)
@@ -24,7 +34,7 @@ $$
 
 ## 行乘以矩阵
 
-在[线性方程的几何表示]([线性方程的几何表示 - Quinn's Blog](https://quinnwencn.github.io/blog/2026/09/15/AI/linear_algebra/the_geometry_of_linear_equations/))中，我们同样讨论过行乘以矩阵，得到的是一个行，因此如果用A矩阵的每一行，乘以B矩阵，就得到了矩阵C：
+在[线性方程的几何表示](https://quinnwencn.github.io/blog/2026/09/15/AI/linear_algebra/the_geometry_of_linear_equations/)中，我们同样讨论过行乘以矩阵，得到的是一个行，因此如果用A矩阵的每一行，乘以B矩阵，就得到了矩阵C：
 
 $$
 C_i = (Row_iofA) * B
